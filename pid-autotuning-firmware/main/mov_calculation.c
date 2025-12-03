@@ -57,3 +57,42 @@ void cal_lin_to_ang_velocity(float x_velocity, float y_velocity, uint8_t vel_sel
         break;
     }
 }
+
+void multiple_movements(Movement *movements, size_t movement_count, float *x_velocity, float *y_velocity)
+{
+    static float g_time = 0.0f;
+
+    for (size_t i = 0; i < movement_count; i++) {
+        
+        Movement mov = movements[i];
+        if (g_time >= mov.duration) {
+            g_time = 0.0f; // Reset global time for the next movement
+            continue; // Move to the next movement
+        } else {
+            g_time += SAMPLE_TIME / 1000.0f; // Increment global time by the sample time in seconds
+        }
+        float temp_x = 0.0f;
+        float temp_y = 0.0f;
+
+        switch (mov.movement_type) {
+            case LINEAR:
+                linear_movement(mov.direction, mov.linear_velocity, mov.angle, &temp_x, &temp_y);
+                break;
+            case CIRCULAR:
+                circular_movement(mov.direction, mov.linear_velocity, mov.angle, mov.radius, &temp_x, &temp_y);
+                break;
+            case ROTATION:
+                // Rotation logic can be added here if needed
+                break;
+            case DO_NOT_MOVE:
+                temp_x = 0.0f;
+                temp_y = 0.0f;
+                break;
+            default:
+                break;
+        }
+
+        *x_velocity = temp_x;
+        *y_velocity = temp_y;
+    }
+}

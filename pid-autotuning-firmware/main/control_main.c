@@ -70,9 +70,9 @@ pid_parameter_t pid_paramB = {
     .beta = 0.0f
 };
 
-enum movements_num movement; ///< Movement type
+enum movements_num movement = LINEAR; ///< Movement type
 float x_vel = .0f, y_vel = .0f; ///< Generalized velocities for the robot
-float goal_time = .0f; ///< Goal time for linear movement in seconds
+float goal_time = 2.0f; ///< Goal time for linear movement in seconds
 
 // Task to read from encoder
 void vTaskEncoder(void * pvParameters) {
@@ -92,9 +92,9 @@ void vTaskEncoder(void * pvParameters) {
         encoder_data->angle = AS5600_ADC_GetAngle(params->gStruct); ///< Get the angle from the ADC
         estimate_velocity_encoder(encoder_data); ///< Estimate the velocity using encoder data
 
-        // // Log every 100ms because of the ESP_LOGI overhead
+        // Log every 100ms because of the ESP_LOGI overhead
         // static int counter = 0;
-        // if (++counter >= 50) {  // 2ms × 50 = 100ms
+        // if (++counter >= 100 / SAMPLE_TIME) {
         //     ESP_LOGI(task_name, "Velocity: %.2f", encoder_data->velocity);
         //     counter = 0;
         // }
@@ -111,12 +111,9 @@ void vTaskControl( void * pvParameters ){
     encoder_data_t *encoder_data = (encoder_data_t *)params->sensor_data; ///< Encoder data structure
 
     pid_block_handle_t pid_block = *(params->pid_block); ///< PID control block handle
-
-    uint32_t timestamp = 1000000, counter = 0; // 1 second
-    bool move = true; ///< Flag to indicate if the robot should move
-
+    
     float est_velocity = 0.0f, last_est_velocity = 0.0f;
-    // float beta = exp(-2 * PI * 1 / 100);  // 10Hz cutoff frequency
+    float beta = exp(-2 * PI * 1 / 100);  // 10Hz cutoff frequency
     float output = 0.0f;
     float setpoint = 0.0f;
 
@@ -131,12 +128,14 @@ void vTaskControl( void * pvParameters ){
         ///<-------------- PID Control ---------------
         // Low-pass filter
         est_velocity = encoder_data->velocity;
+        est_velocity = beta * last_est_velocity + (1 - beta) * est_velocity;
 
         last_est_velocity = est_velocity; ///< Update the last estimated velocity
 
         switch (movement) ///< Check the movement type
         {
         case LINEAR:
+            linear_movement(true, 5, 0, &x_vel, &y_vel); ///< Calculate the linear movement
             cal_lin_to_ang_velocity(x_vel, y_vel, params->vel_selection, &setpoint); ///< Calculate the setpoint based on the predefined movements
             break;
         case CIRCULAR:
@@ -164,7 +163,7 @@ void vTaskControl( void * pvParameters ){
 
         // Log every 100ms because of the ESP_LOGI overhead
         // static int ctr = 0;
-        // if (++ctr >= 150) {  // 2ms × 50 = 100ms
+        // if (++ctr >= 100 / SAMPLE_TIME) { 
         //     // ESP_LOGI(task_name, "Input: %.2f\tOutput: %.2f", est_velocity, output); ///< Log the PID parameters
         //     ESP_LOGI(task_name, "Input: %.2f\tOutput: %.2f\tSetpoint: %.2f", est_velocity, output, setpoint); ///< Log the PID parameters
         //     ctr = 0;
@@ -181,6 +180,7 @@ void vTaskDistance(void *pvParameters){
     encoder_data_t *encoder_data_right = params->encoder_data_right; ///< Encoder data structure for right wheel
     encoder_data_t *encoder_data_left = params->encoder_data_left; ///< Encoder data structure for left wheel
     encoder_data_t *encoder_data_back = params->encoder_data_back; ///< Encoder data structure for back wheel
+
     float dx, dy, distance = 0, beta = 0.9; ///< Variables to store the distance
 
     while(1){

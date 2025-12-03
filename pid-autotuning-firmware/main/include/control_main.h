@@ -20,7 +20,6 @@
 #include "freertos/semphr.h"
 #include "driver/gptimer.h"
 
-#define SAMPLE_TIME 2 ///< Sample time in ms
 #define WHEEL_RADIO 3.0f ///< Radio of the wheel in cm
 
 ///<-------------- AS5600 configuration --------------
@@ -75,13 +74,6 @@ typedef struct {
 
 } distance_params_t;
 
-enum movements_num {
-    LINEAR = 0,   ///< Linear movement
-    CIRCULAR = 1, ///< Circular movement
-    ROTATION = 2, ///< Rotation movement
-    DO_NOT_MOVE = 3 ///< Do not move
-};
-
 /**
  * @brief Task to read from encoder
  */
@@ -100,10 +92,5 @@ void vTaskControl( void * pvParameters );
  * @param pvParameters
  */
 void vTaskDistance(void * pvParameters);
-
-/**
- * @brief udp server task to handle incoming requests
- */
-void vTaskUDPServer(void * pvParameters);
 
 #endif // CONTROL_H
