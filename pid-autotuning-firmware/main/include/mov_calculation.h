@@ -65,6 +65,6 @@ void cal_lin_to_ang_velocity(float x_velocity, float y_velocity, uint8_t vel_sel
  * @param x_velocity Pointer to store the resulting x component of the velocity.
  * @param y_velocity Pointer to store the resulting y component of the velocity.
  */
-void multiple_movements(Movement * movements, size_t movement_count, float *x_velocity, float *y_velocity);
+void multiple_movements(Movement * movements, uint8_t movement_count, float *x_velocity, float *y_velocity);
 
 #endif // MOV_CALCULATION_H

@@ -87,6 +87,19 @@ void app_main(void)
     }
     ///<--------------------------------------------------
 
+     ///<------------- Initialize the PID controllers ------
+    pid_config_t pid_config = {
+        .init_param = pid_paramR
+    };
+    pid_new_control_block(&pid_config, &pidR);
+
+    pid_config.init_param = pid_paramL;
+    pid_new_control_block(&pid_config, &pidL);
+
+    pid_config.init_param = pid_paramB;
+    pid_new_control_block(&pid_config, &pidB);
+    ///<---------------------------------------------------
+
     ///<---------- Initialize control parameters ---------
     static control_params_t right_control_params = {
         .gStruct = &gAs5600R,

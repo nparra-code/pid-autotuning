@@ -122,6 +122,10 @@ void vTaskControl( void * pvParameters ){
 
     // Get task name
     const char *task_name = pcTaskGetName(xTask);
+    Movement movements[] = {
+        {LINEAR, true, 15, 90, .0, 10.0f},
+        {CIRCULAR, true, 5, 360, 20.0f, (360.0 / 360.0) * 2 * PI * 20 / 5},
+    };
 
     while (1)
     {
@@ -132,29 +136,11 @@ void vTaskControl( void * pvParameters ){
 
         last_est_velocity = est_velocity; ///< Update the last estimated velocity
 
-        switch (movement) ///< Check the movement type
-        {
-        case LINEAR:
-            linear_movement(true, 5, 0, &x_vel, &y_vel); ///< Calculate the linear movement
-            cal_lin_to_ang_velocity(x_vel, y_vel, params->vel_selection, &setpoint); ///< Calculate the setpoint based on the predefined movements
-            break;
-        case CIRCULAR:
-            // circular_movement(1, 5, 360, 15, &x_vel, &y_vel); ///< Calculate the circular movement
-            // cal_lin_to_ang_velocity(params->x_vel, params->y_vel, params->vel_selection, &setpoint); ///< Calculate the setpoint based on the predefined movements
-            break;
-        case ROTATION:
-            // cal_lin_to_ang_velocity(params->x_vel, params->y_vel, params->vel_selection, &setpoint); ///< Calculate the setpoint based on the predefined movements
-            break;
-        case DO_NOT_MOVE:
-            setpoint = 0.0f; ///< Set the setpoint to 0 for no movement
-            break;
-        
-        default:
-            break;
-        }
+        multiple_movements(movements, 2, &x_vel, &y_vel); ///< Get the generalized velocities for the robot
+        cal_lin_to_ang_velocity(x_vel, y_vel, params->vel_selection, &setpoint); ///< Calculate the angular velocity for the wheel
 
         if (pid_update_set_point(pid_block, setpoint) != PID_OK) {
-            ESP_LOGE(task_name, "Failed to update PID parameters for %s", task_name);
+            // ESP_LOGE(task_name, "Failed to update PID parameters for %s", task_name);
         }
 
         // Update PID Controller
@@ -162,12 +148,13 @@ void vTaskControl( void * pvParameters ){
         bldc_set_duty(params->pwm_motor, output); ///< Set the duty cycle to the output of the PID controller
 
         // Log every 100ms because of the ESP_LOGI overhead
-        // static int ctr = 0;
-        // if (++ctr >= 100 / SAMPLE_TIME) { 
-        //     // ESP_LOGI(task_name, "Input: %.2f\tOutput: %.2f", est_velocity, output); ///< Log the PID parameters
-        //     ESP_LOGI(task_name, "Input: %.2f\tOutput: %.2f\tSetpoint: %.2f", est_velocity, output, setpoint); ///< Log the PID parameters
-        //     ctr = 0;
-        // }
+        static int ctr = 0;
+        if (++ctr >= 100 / SAMPLE_TIME) { 
+            // ESP_LOGI(task_name, "Input: %.2f\tOutput: %.2f", est_velocity, output); ///< Log the PID parameters
+            ESP_LOGI(task_name, "Input: %.2f\tOutput: %.2f\tSetpoint: %.2f", est_velocity, output, setpoint); ///< Log the PID parameters
+            // ESP_LOGI("CTRL_TASK", "X_vel: %.2f\tY_vel: %.2f", x_vel, y_vel); ///< Log the generalized velocities
+            ctr = 0;
+        }
         
         vTaskDelay(SAMPLE_TIME / portTICK_PERIOD_MS); ///< Wait for 2 ms
     }
