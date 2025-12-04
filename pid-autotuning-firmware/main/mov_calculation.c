@@ -1,5 +1,4 @@
 #include "mov_calculation.h"
-#include "esp_log.h"
 
 void linear_movement(bool forward, float linear_velocity, float angle, float *x_velocity, float *y_velocity) {
     if (forward) {

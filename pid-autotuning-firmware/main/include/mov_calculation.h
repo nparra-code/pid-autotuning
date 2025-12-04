@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include "esp_log.h"
 
 #define SAMPLE_TIME 2 ///< Sample time in ms
 #define PI 3.14159265358979323846
