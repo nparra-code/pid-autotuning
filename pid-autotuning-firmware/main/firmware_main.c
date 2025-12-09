@@ -19,8 +19,273 @@
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/event_groups.h"
 
 #include "control_main.h"
+#include "esp_wifi.h"
+#include "esp_event.h"
+#include "nvs_flash.h"
+#include "telemetry.h"
+#include "esp_netif.h"
+
+static const char *TAG = "MAIN";
+
+// WiFi event group bits
+#define WIFI_CONNECTED_BIT BIT0
+#define WIFI_FAIL_BIT      BIT1
+
+static EventGroupHandle_t s_wifi_event_group;
+static int s_retry_num = 0;
+#define ESP_MAXIMUM_RETRY  5
+
+// Your WiFi credentials
+#define WIFI_SSID "Howlers-Ude"
+#define WIFI_PASS "9876543210"
+#define SERVER_IP "10.163.94.125"  // Your station IP
+
+extern encoder_data_t right_encoder_data;
+extern encoder_data_t left_encoder_data;
+extern encoder_data_t back_encoder_data;
+
+extern pid_parameter_t pid_paramR;
+extern pid_parameter_t pid_paramL;
+extern pid_parameter_t pid_paramB;
+
+// Current PID constants (will be updated by autotuner)
+static pid_response_t current_pid = {
+    .kp = {1.0f, 1.0f, 1.0f},
+    .ki = {0.1f, 0.1f, 0.1f},
+    .kd = {0.01f, 0.01f, 0.01f},
+    .iteration = 0,
+    .converged = 0
+};
+
+// WiFi event handler
+static void wifi_event_handler(void* arg, esp_event_base_t event_base,
+                                int32_t event_id, void* event_data)
+{
+    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
+        esp_wifi_connect();
+        ESP_LOGI(TAG, "WiFi station started, connecting...");
+    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        if (s_retry_num < ESP_MAXIMUM_RETRY) {
+            esp_wifi_connect();
+            s_retry_num++;
+            ESP_LOGI(TAG, "Retry to connect to the AP (attempt %d/%d)", s_retry_num, ESP_MAXIMUM_RETRY);
+        } else {
+            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+            ESP_LOGE(TAG, "Failed to connect to WiFi after %d attempts", ESP_MAXIMUM_RETRY);
+        }
+    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+        ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
+        ESP_LOGI(TAG, "Got IP address: " IPSTR, IP2STR(&event->ip_info.ip));
+        s_retry_num = 0;
+        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+    }
+}
+
+// WiFi initialization with event handlers
+static void wifi_init(void) {
+    // Initialize NVS
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+    vTaskDelay(pdMS_TO_TICKS(100));
+    
+    // Initialize TCP/IP stack
+    ESP_ERROR_CHECK(esp_netif_init());
+    vTaskDelay(pdMS_TO_TICKS(100));
+    
+    // Create default event loop
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    vTaskDelay(pdMS_TO_TICKS(100));
+    
+    // Create default WiFi station
+    esp_netif_create_default_wifi_sta();
+    vTaskDelay(pdMS_TO_TICKS(100));
+    
+    // Initialize WiFi with default config
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    vTaskDelay(pdMS_TO_TICKS(100));
+    
+    // Configure WiFi
+    wifi_config_t wifi_config = {
+        .sta = {
+            .ssid = WIFI_SSID,
+            .password = WIFI_PASS,
+            .threshold.authmode = WIFI_AUTH_WPA2_PSK,
+        },
+    };
+    
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    vTaskDelay(pdMS_TO_TICKS(100));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+    vTaskDelay(pdMS_TO_TICKS(100));
+    ret = esp_wifi_start();
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to start Wi-Fi: %s", esp_err_to_name(ret));
+        return;
+    }
+    else
+    {
+        ESP_LOGI(TAG, "Wi-Fi started successfully");
+        esp_wifi_connect();
+    }
+}
+
+// Read actual sensor data from robot encoders
+static void read_robot_sensors(robot_sample_t *sample) {
+    // Read timestamp
+    sample->timestamp_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
+    
+    // Read actual encoder velocities for each wheel
+    sample->motor_speed[0] = right_encoder_data.velocity;  // Right wheel
+    sample->motor_speed[1] = left_encoder_data.velocity;   // Left wheel
+    sample->motor_speed[2] = back_encoder_data.velocity;   // Back wheel
+    
+    // Motor current (placeholder - add actual current sensing if available)
+    sample->motor_current[0] = 0.0f;
+    sample->motor_current[1] = 0.0f;
+    sample->motor_current[2] = 0.0f;
+    
+    // Target speeds from PID setpoints
+    sample->target_speed[0] = pid_paramR.set_point;
+    sample->target_speed[1] = pid_paramL.set_point;
+    sample->target_speed[2] = pid_paramB.set_point;
+    
+    // Robot position and heading (placeholder - add actual odometry if available)
+    sample->position_x = 0.0f;
+    sample->position_y = 0.0f;
+    sample->heading = 0.0f;
+}
+
+// Apply PID constants to motor controllers
+static void apply_pid_constants(const pid_response_t *pid_response) {
+    ESP_LOGI(TAG, "Applying PID constants:");
+    
+    // Update right wheel PID
+    pid_paramR.kp = pid_response->kp[0];
+    pid_paramR.ki = pid_response->ki[0];
+    pid_paramR.kd = pid_response->kd[0];
+    ESP_LOGI(TAG, "  Right Motor: Kp=%.3f, Ki=%.3f, Kd=%.3f",
+             pid_paramR.kp, pid_paramR.ki, pid_paramR.kd);
+    
+    // Update left wheel PID
+    pid_paramL.kp = pid_response->kp[1];
+    pid_paramL.ki = pid_response->ki[1];
+    pid_paramL.kd = pid_response->kd[1];
+    ESP_LOGI(TAG, "  Left Motor: Kp=%.3f, Ki=%.3f, Kd=%.3f",
+             pid_paramL.kp, pid_paramL.ki, pid_paramL.kd);
+    
+    // Update back wheel PID
+    pid_paramB.kp = pid_response->kp[2];
+    pid_paramB.ki = pid_response->ki[2];
+    pid_paramB.kd = pid_response->kd[2];
+    ESP_LOGI(TAG, "  Back Motor: Kp=%.3f, Ki=%.3f, Kd=%.3f",
+             pid_paramB.kp, pid_paramB.ki, pid_paramB.kd);
+    
+    if (pid_response->converged) {
+        ESP_LOGI(TAG, "PID autotuning CONVERGED at iteration %d!", pid_response->iteration);
+    } else {
+        ESP_LOGI(TAG, "PID autotuning iteration %d", pid_response->iteration);
+    }
+}
+
+// Main autotuning task
+static void autotuning_task(void *pvParameters) {
+    robot_sample_t sample;
+    esp_err_t ret;
+    
+    ESP_LOGI(TAG, "Starting autotuning task");
+    
+    // Wait for WiFi connection event
+    ESP_LOGI(TAG, "Waiting for WiFi connection...");
+    
+    ESP_LOGI(TAG, "WiFi connected, initializing telemetry...");
+    
+    // Initialize telemetry
+    ret = telemetry_init(SERVER_IP);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize telemetry");
+        vTaskDelete(NULL);
+        return;
+    }
+    
+    // Give some time for network stack to stabilize
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    
+    // Connect to server
+    ret = telemetry_connect();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to connect to server");
+        vTaskDelete(NULL);
+        return;
+    }
+    
+    ESP_LOGI(TAG, "Starting autotuning loop");
+    
+    while (!current_pid.converged) {
+        // Phase 1: Collect data
+        ESP_LOGI(TAG, "Collecting %d samples...", TELEMETRY_SAMPLE_WINDOW);
+        
+        for (int i = 0; i < TELEMETRY_SAMPLE_WINDOW; i++) {
+            read_robot_sensors(&sample);
+            
+            ret = telemetry_add_sample(&sample);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to add sample");
+                break;
+            }
+            
+            // Sample at 100Hz (10ms interval)
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+        
+        // Phase 2: Send batch to server
+        ESP_LOGI(TAG, "Sending data batch to server...");
+        ret = telemetry_send_batch();
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to send batch");
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;
+        }
+        
+        // Phase 3: Wait for PID response
+        ESP_LOGI(TAG, "Waiting for PID response...");
+        ret = telemetry_receive_pid(&current_pid, 10000);  // 10 second timeout
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to receive PID response");
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;
+        }
+        
+        // Phase 4: Apply new PID constants
+        apply_pid_constants(&current_pid);
+        
+        // Print statistics
+        uint32_t samples_sent, responses_recv, errors;
+        telemetry_get_stats(&samples_sent, &responses_recv, &errors);
+        ESP_LOGI(TAG, "Stats: samples=%lu, responses=%lu, errors=%lu",
+                 samples_sent, responses_recv, errors);
+        
+        // Small delay before next iteration
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
+    
+    ESP_LOGI(TAG, "Autotuning complete!");
+    
+    // Disconnect
+    telemetry_disconnect();
+    
+    vTaskDelete(NULL);
+}
 
 void app_main(void)
 {
@@ -140,67 +405,70 @@ void app_main(void)
 
     ///<--------------------------------------------------
 
+    ESP_LOGI("", "=== PID Autotuner Robot ===");
+    
+    // Initialize WiFi
+    wifi_init();
+
+    vTaskDelay(5000 / portTICK_PERIOD_MS); ///< Wait for 1 second to ensure all peripherals are initialized
+    
+    // Create autotuning task
+    configASSERT(xTaskCreatePinnedToCore(autotuning_task, "autotuning", 8192, NULL, 9, NULL, 0));
+
     vTaskDelay(5000 / portTICK_PERIOD_MS); ///< Wait for 1 second to ensure all peripherals are initialized
 
     ///<-------------- Create the task ---------------
 
-    TaskHandle_t xRightEncoderTaskHandle, xLeftEncoderTaskHandle, xBackEncoderTaskHandle; ///< Task handles for encoders
+    // TaskHandle_t xRightEncoderTaskHandle, xLeftEncoderTaskHandle, xBackEncoderTaskHandle; ///< Task handles for encoders
     
-    TaskHandle_t xRightControlTaskHandle, xLeftControlTaskHandle, xBackControlTaskHandle, xDistanceTaskHandle; ///< Task handles for control tasks
-    xTaskCreatePinnedToCore(vTaskControl, "rwh_control_task", 4096, &right_control_params, 9, &xRightControlTaskHandle, 1); ///< Create the task to control the right wheel
-    xTaskCreatePinnedToCore(vTaskControl, "lwh_control_task", 4096, &left_control_params, 9, &xLeftControlTaskHandle, 1);   ///< Create the task to control the left wheel
-    xTaskCreatePinnedToCore(vTaskControl, "bwh_control_task", 4096, &back_control_params, 9, &xBackControlTaskHandle, 1);   ///< Create the task to control the back wheel
+    // TaskHandle_t xRightControlTaskHandle, xLeftControlTaskHandle, xBackControlTaskHandle, xDistanceTaskHandle; ///< Task handles for control tasks
+    // xTaskCreatePinnedToCore(vTaskControl, "rwh_control_task", 4096, &right_control_params, 9, &xRightControlTaskHandle, 1); ///< Create the task to control the right wheel
+    // xTaskCreatePinnedToCore(vTaskControl, "lwh_control_task", 4096, &left_control_params, 9, &xLeftControlTaskHandle, 1);   ///< Create the task to control the left wheel
+    // xTaskCreatePinnedToCore(vTaskControl, "bwh_control_task", 4096, &back_control_params, 9, &xBackControlTaskHandle, 1);   ///< Create the task to control the back wheel
 
-    configASSERT(xRightControlTaskHandle); ///< Check if the task was created successfully
-    if (xRightControlTaskHandle == NULL) {
-        ESP_LOGE("CTRL_TASK", "Failed to create task...");
-        return;
-    }
-    configASSERT(xLeftControlTaskHandle); ///< Check if the task was created successfully
-    if (xLeftControlTaskHandle == NULL) {
-        ESP_LOGE("CTRL_TASK", "Failed to create task...");
-        return;
-    }
-    configASSERT(xBackControlTaskHandle); ///< Check if the task was created successfully
-    if (xBackControlTaskHandle == NULL) {
-        ESP_LOGE("CTRL_TASK", "Failed to create task...");
-        return;
-    }
+    // configASSERT(xRightControlTaskHandle); ///< Check if the task was created successfully
+    // if (xRightControlTaskHandle == NULL) {
+    //     ESP_LOGE("CTRL_TASK", "Failed to create task...");
+    //     return;
+    // }
+    // configASSERT(xLeftControlTaskHandle); ///< Check if the task was created successfully
+    // if (xLeftControlTaskHandle == NULL) {
+    //     ESP_LOGE("CTRL_TASK", "Failed to create task...");
+    //     return;
+    // }
+    // configASSERT(xBackControlTaskHandle); ///< Check if the task was created successfully
+    // if (xBackControlTaskHandle == NULL) {
+    //     ESP_LOGE("CTRL_TASK", "Failed to create task...");
+    //     return;
+    // }
 
-    xTaskCreatePinnedToCore(vTaskDistance, "distance_task", 2048, &distance_params, 8, &xDistanceTaskHandle, 1); ///< Create the task to keep track of distance
-    configASSERT(xDistanceTaskHandle); ///< Check if the task was created successfully
-    if (xDistanceTaskHandle == NULL) {
-        ESP_LOGE("DISTANCE_TASK", "Failed to create task...");
-        return;
-    }
+    // xTaskCreatePinnedToCore(vTaskDistance, "distance_task", 2048, &distance_params, 8, &xDistanceTaskHandle, 1); ///< Create the task to keep track of distance
+    // configASSERT(xDistanceTaskHandle); ///< Check if the task was created successfully
+    // if (xDistanceTaskHandle == NULL) {
+    //     ESP_LOGE("DISTANCE_TASK", "Failed to create task...");
+    //     return;
+    // }
 
-    ESP_LOGI("TASKS", "Right encoder handle: 0x%04X", gAs5600R.out); ///< Log the task handles
-    xTaskCreatePinnedToCore(vTaskEncoder, "right_encoder_task", 4096, &right_control_params, 8, &xRightEncoderTaskHandle, 0); ///< Create the task to read from right encoder
-    xTaskCreatePinnedToCore(vTaskEncoder, "left_encoder_task", 4096, &left_control_params, 8, &xLeftEncoderTaskHandle, 0);    ///< Create the task to read from left encoder
-    xTaskCreatePinnedToCore(vTaskEncoder, "back_encoder_task", 4096, &back_control_params, 8, &xBackEncoderTaskHandle, 0);    ///< Create the task to read from back encoder
+    // ESP_LOGI("TASKS", "Right encoder handle: 0x%04X", gAs5600R.out); ///< Log the task handles
+    // xTaskCreatePinnedToCore(vTaskEncoder, "right_encoder_task", 4096, &right_control_params, 8, &xRightEncoderTaskHandle, 0); ///< Create the task to read from right encoder
+    // xTaskCreatePinnedToCore(vTaskEncoder, "left_encoder_task", 4096, &left_control_params, 8, &xLeftEncoderTaskHandle, 0);    ///< Create the task to read from left encoder
+    // xTaskCreatePinnedToCore(vTaskEncoder, "back_encoder_task", 4096, &back_control_params, 8, &xBackEncoderTaskHandle, 0);    ///< Create the task to read from back encoder
 
-    configASSERT(xRightEncoderTaskHandle); ///< Check if the task was created successfully
-    if (xRightEncoderTaskHandle == NULL) {
-        ESP_LOGE("ENCODER_TASK", "Failed to create task...");
-        return;
-    }
-    configASSERT(xLeftEncoderTaskHandle); ///< Check if the task was created successfully
-    if (xLeftEncoderTaskHandle == NULL) {
-        ESP_LOGE("ENCODER_TASK", "Failed to create task...");
-        return;
-    }
-    configASSERT(xBackEncoderTaskHandle); ///< Check if the task was created successfully
-    if (xBackEncoderTaskHandle == NULL) {
-        ESP_LOGE("ENCODER_TASK", "Failed to create task...");
-        return;
-    }
+    // configASSERT(xRightEncoderTaskHandle); ///< Check if the task was created successfully
+    // if (xRightEncoderTaskHandle == NULL) {
+    //     ESP_LOGE("ENCODER_TASK", "Failed to create task...");
+    //     return;
+    // }
+    // configASSERT(xLeftEncoderTaskHandle); ///< Check if the task was created successfully
+    // if (xLeftEncoderTaskHandle == NULL) {
+    //     ESP_LOGE("ENCODER_TASK", "Failed to create task...");
+    //     return;
+    // }
+    // configASSERT(xBackEncoderTaskHandle); ///< Check if the task was created successfully
+    // if (xBackEncoderTaskHandle == NULL) {
+    //     ESP_LOGE("ENCODER_TASK", "Failed to create task...");
+    //     return;
+    // }
     ///<--------------------------------------------------
-
-
-    
-
-
-
-
 
 }

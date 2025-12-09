@@ -46,9 +46,6 @@ typedef struct {
     float position_x;            // Robot position X
     float position_y;            // Robot position Y
     float heading;               // Robot heading (radians)
-    float gyro_z;                // Gyroscope Z-axis
-    float accel_x;               // Accelerometer X
-    float accel_y;               // Accelerometer Y
 } __attribute__((packed)) robot_sample_t;
 
 // Data batch structure
