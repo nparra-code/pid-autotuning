@@ -48,6 +48,30 @@ typedef struct {
     pid_parameter_t init_param; // Initial parameters
 } pid_config_t;
 
+typedef struct pid_block_t pid_block_t;
+typedef void (*pid_cal_func_t)(pid_block_t *pid);
+
+struct pid_block_t {
+    float Kp; // PID Kp value
+    float Ki; // PID Ki value
+    float Kd; // PID Kd value
+    float error; // PID error e(n)
+    float previous_err1; // e(n-1)
+    float previous_err2; // e(n-2)
+    float integral_err;  // Sum of error
+    float derivative_err; // Derivative of error
+    float previous_derivative_err; // Derivative of error in last control period
+    float previous_output;  // PID output in last control period u(n-1)
+    float max_output;   // PID maximum output limitation
+    float min_output;   // PID minimum output limitation
+    float set_point;    // PID set point (k)
+    float last_set_point;          // Last set point (k-1)
+    float last_last_set_point;     // Last last set point (k-2)
+    float output;       // PID output
+    float beta;         // PID beta filter coefficient of derivative term
+    pid_cal_func_t calculate_func; // calculation function, depends on actual PID type set by user
+};
+
 
 /**
  * @brief Create a new PID control session, returns the handle of control block

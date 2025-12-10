@@ -29,9 +29,11 @@ typedef struct
 typedef struct
 {
     float angle; // Angle in degrees
+    float angle_prev; // Previous angle in degrees
     float velocity; // Velocity in cm/s
     float last_vel; // Last velocity in cm/s
-    float angle_prev; // Angle in degrees
+    float state; // State variable (angular velocity)
+    float last_st; // Last state variable (angular velocity)
     float radio;
 
     float distance; // Distance in cm

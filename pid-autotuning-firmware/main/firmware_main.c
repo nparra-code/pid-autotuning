@@ -39,17 +39,26 @@ static int s_retry_num = 0;
 #define ESP_MAXIMUM_RETRY  5
 
 // Your WiFi credentials
-#define WIFI_SSID "Howlers-Ude"
-#define WIFI_PASS "9876543210"
-#define SERVER_IP "10.163.94.125"  // Your station IP
+#define WIFI_SSID "TP-Link_CCAF"
+#define WIFI_PASS "26944777"
+#define SERVER_IP "192.168.0.233"  // Your station IP
 
-extern encoder_data_t right_encoder_data;
-extern encoder_data_t left_encoder_data;
-extern encoder_data_t back_encoder_data;
+// extern encoder_data_t right_encoder_data;
+// extern encoder_data_t left_encoder_data;
+// extern encoder_data_t back_encoder_data;
 
-extern pid_parameter_t pid_paramR;
-extern pid_parameter_t pid_paramL;
-extern pid_parameter_t pid_paramB;
+// extern pid_parameter_t pid_paramR;
+// extern pid_parameter_t pid_paramL;
+// extern pid_parameter_t pid_paramB;
+
+static AS5600_t gAs5600R, gAs5600L, gAs5600B;  ///< AS5600 object for angle sensor right, left and back
+
+extern encoder_data_t right_encoder_data, left_encoder_data, back_encoder_data; ///< Encoder data for right, left and back wheels
+
+static bldc_pwm_motor_t pwmR, pwmL, pwmB;   ///< BLDC motor object right, left and back
+static pid_block_handle_t pidR, pidL, pidB; ///< PID control block handle
+
+extern pid_parameter_t pid_paramR, pid_paramL, pid_paramB; ///< PID parameters for right, left and back wheels
 
 // Current PID constants (will be updated by autotuner)
 static pid_response_t current_pid = {
@@ -144,26 +153,31 @@ static void wifi_init(void) {
 static void read_robot_sensors(robot_sample_t *sample) {
     // Read timestamp
     sample->timestamp_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
-    
-    // Read actual encoder velocities for each wheel
-    sample->motor_speed[0] = right_encoder_data.velocity;  // Right wheel
-    sample->motor_speed[1] = left_encoder_data.velocity;   // Left wheel
-    sample->motor_speed[2] = back_encoder_data.velocity;   // Back wheel
-    
+
     // Motor current (placeholder - add actual current sensing if available)
-    sample->motor_current[0] = 0.0f;
-    sample->motor_current[1] = 0.0f;
-    sample->motor_current[2] = 0.0f;
+    sample->motor_state[0] = right_encoder_data.state;
+    sample->motor_state[1] = left_encoder_data.state;
+    sample->motor_state[2] = back_encoder_data.state;
+
+    // Motor setpoints from PID parameters
+    sample->motor_setpoint[0] = pidR->set_point;
+    sample->motor_setpoint[1] = pidL->set_point;
+    sample->motor_setpoint[2] = pidB->set_point;
+
+    // Error history (difference between setpoint and actual state)
+    // Shift previous errors (k-2)
+    sample->errors[0][2] = sample->errors[0][1];
+    sample->errors[1][2] = sample->errors[1][1]; 
+    sample->errors[2][2] = sample->errors[2][1];
     
-    // Target speeds from PID setpoints
-    sample->target_speed[0] = pid_paramR.set_point;
-    sample->target_speed[1] = pid_paramL.set_point;
-    sample->target_speed[2] = pid_paramB.set_point;
-    
-    // Robot position and heading (placeholder - add actual odometry if available)
-    sample->position_x = 0.0f;
-    sample->position_y = 0.0f;
-    sample->heading = 0.0f;
+    // Shift last errors (k-1)
+    sample->errors[0][1] = sample->errors[0][0];
+    sample->errors[1][1] = sample->errors[1][0];
+    sample->errors[2][1] = sample->errors[2][0];
+
+    sample->errors[0][0] = pidR->set_point - right_encoder_data.state; // Current motor 1 error (k)
+    sample->errors[1][0] = pidL->set_point - left_encoder_data.state;  // Current motor 2 error (k)
+    sample->errors[2][0] = pidB->set_point - back_encoder_data.state;  // Current motor 3 error (k)
 }
 
 // Apply PID constants to motor controllers
@@ -245,7 +259,7 @@ static void autotuning_task(void *pvParameters) {
             }
             
             // Sample at 100Hz (10ms interval)
-            vTaskDelay(pdMS_TO_TICKS(10));
+            vTaskDelay(pdMS_TO_TICKS(7));
         }
         
         // Phase 2: Send batch to server
@@ -290,15 +304,9 @@ static void autotuning_task(void *pvParameters) {
 void app_main(void)
 {
 
-    static AS5600_t gAs5600R, gAs5600L, gAs5600B;  ///< AS5600 object for angle sensor right, left and back
-
-    extern encoder_data_t right_encoder_data, left_encoder_data, back_encoder_data; ///< Encoder data for right, left and back wheels
-
-    static bldc_pwm_motor_t pwmR, pwmL, pwmB;   ///< BLDC motor object right, left and back
-    static pid_block_handle_t pidR, pidL, pidB; ///< PID control block handle
-
-    extern pid_parameter_t pid_paramR, pid_paramL, pid_paramB; ///< PID parameters for right, left and back wheels 
-
+    ESP_LOGI(TAG, "Initializing WiFi...");
+    wifi_init();
+    
     ///<------- Initialize the BLDC motors PWMs ----------
     bldc_init(&pwmR, PWM_GPIO_R, PWM_REV_GPIO_R, PWM_FREQ, 0, PWM_RESOLUTION, MIN_PWM_CAL, MAX_PWM_CAL); ///< Initialize the BLDC motor
     bldc_enable(&pwmR); ///< Enable the BLDC motor
@@ -350,6 +358,10 @@ void app_main(void)
     if (!adc_config_channel(&gAs5600B.adc_handle, AS5600_OUT_GPIO_BACK, AS5600_ADC_UNIT_ID)) {
         ESP_LOGE("AS5600_ADC_CH", "AS5600 back sensor ADC initialization failed\n");
     }
+    
+    // CRITICAL: Wait for ADC calibration to complete before any tasks use it
+    ESP_LOGI(TAG, "Waiting for ADC calibration to stabilize...");
+    vTaskDelay(pdMS_TO_TICKS(500));
     ///<--------------------------------------------------
 
      ///<------------- Initialize the PID controllers ------
@@ -405,42 +417,65 @@ void app_main(void)
 
     ///<--------------------------------------------------
 
-    ESP_LOGI("", "=== PID Autotuner Robot ===");
+    TaskHandle_t xRightEncoderTaskHandle, xLeftEncoderTaskHandle, xBackEncoderTaskHandle; ///< Task handles for encoders
     
-    // Initialize WiFi
-    wifi_init();
+    TaskHandle_t xRightControlTaskHandle, xLeftControlTaskHandle, xBackControlTaskHandle, xDistanceTaskHandle; ///< Task handles for control tasks
 
-    vTaskDelay(5000 / portTICK_PERIOD_MS); ///< Wait for 1 second to ensure all peripherals are initialized
+    ESP_LOGI(TAG, "=== PID Autotuner Robot ===");
+
+    ///<-------------- Create the encoders tasks ---------------
+
+    xTaskCreatePinnedToCore(vTaskEncoder, "right_encoder_task", 4096, &right_control_params, 8, &xRightEncoderTaskHandle, 0); ///< Create the task to read from right encoder
+    xTaskCreatePinnedToCore(vTaskEncoder, "left_encoder_task", 4096, &left_control_params, 8, &xLeftEncoderTaskHandle, 0);    ///< Create the task to read from left encoder
+    xTaskCreatePinnedToCore(vTaskEncoder, "back_encoder_task", 4096, &back_control_params, 8, &xBackEncoderTaskHandle, 0);    ///< Create the task to read from back encoder
+
+    configASSERT(xRightEncoderTaskHandle); ///< Check if the task was created successfully
+    if (xRightEncoderTaskHandle == NULL) {
+        ESP_LOGE("ENCODER_TASK", "Failed to create task...");
+        return;
+    }
+    configASSERT(xLeftEncoderTaskHandle); ///< Check if the task was created successfully
+    if (xLeftEncoderTaskHandle == NULL) {
+        ESP_LOGE("ENCODER_TASK", "Failed to create task...");
+        return;
+    }
+    configASSERT(xBackEncoderTaskHandle); ///< Check if the task was created successfully
+    if (xBackEncoderTaskHandle == NULL) {
+        ESP_LOGE("ENCODER_TASK", "Failed to create task...");
+        return;
+    }
+    ///<--------------------------------------------------------
+
+    // vTaskDelay(5000 / portTICK_PERIOD_MS); ///< Wait for 1 second to ensure all peripherals are initialized
     
-    // Create autotuning task
-    configASSERT(xTaskCreatePinnedToCore(autotuning_task, "autotuning", 8192, NULL, 9, NULL, 0));
+    // // Create autotuning task
+    // configASSERT(xTaskCreatePinnedToCore(autotuning_task, "autotuning", 8192, NULL, 9, NULL, 0));
 
-    vTaskDelay(5000 / portTICK_PERIOD_MS); ///< Wait for 1 second to ensure all peripherals are initialized
+    // vTaskDelay(5000 / portTICK_PERIOD_MS); ///< Wait for 1 second to ensure all peripherals are initialized
 
-    ///<-------------- Create the task ---------------
+    ///<--------------------------------------------------------
 
-    // TaskHandle_t xRightEncoderTaskHandle, xLeftEncoderTaskHandle, xBackEncoderTaskHandle; ///< Task handles for encoders
+    ///<-------------- Create the control tasks ----------------
     
-    // TaskHandle_t xRightControlTaskHandle, xLeftControlTaskHandle, xBackControlTaskHandle, xDistanceTaskHandle; ///< Task handles for control tasks
-    // xTaskCreatePinnedToCore(vTaskControl, "rwh_control_task", 4096, &right_control_params, 9, &xRightControlTaskHandle, 1); ///< Create the task to control the right wheel
-    // xTaskCreatePinnedToCore(vTaskControl, "lwh_control_task", 4096, &left_control_params, 9, &xLeftControlTaskHandle, 1);   ///< Create the task to control the left wheel
-    // xTaskCreatePinnedToCore(vTaskControl, "bwh_control_task", 4096, &back_control_params, 9, &xBackControlTaskHandle, 1);   ///< Create the task to control the back wheel
+    xTaskCreatePinnedToCore(vTaskControl, "rwh_control_task", 4096, &right_control_params, 9, &xRightControlTaskHandle, 1); ///< Create the task to control the right wheel
+    xTaskCreatePinnedToCore(vTaskControl, "lwh_control_task", 4096, &left_control_params, 9, &xLeftControlTaskHandle, 1);   ///< Create the task to control the left wheel
+    xTaskCreatePinnedToCore(vTaskControl, "bwh_control_task", 4096, &back_control_params, 9, &xBackControlTaskHandle, 1);   ///< Create the task to control the back wheel
 
-    // configASSERT(xRightControlTaskHandle); ///< Check if the task was created successfully
-    // if (xRightControlTaskHandle == NULL) {
-    //     ESP_LOGE("CTRL_TASK", "Failed to create task...");
-    //     return;
-    // }
-    // configASSERT(xLeftControlTaskHandle); ///< Check if the task was created successfully
-    // if (xLeftControlTaskHandle == NULL) {
-    //     ESP_LOGE("CTRL_TASK", "Failed to create task...");
-    //     return;
-    // }
-    // configASSERT(xBackControlTaskHandle); ///< Check if the task was created successfully
-    // if (xBackControlTaskHandle == NULL) {
-    //     ESP_LOGE("CTRL_TASK", "Failed to create task...");
-    //     return;
-    // }
+    configASSERT(xRightControlTaskHandle); ///< Check if the task was created successfully
+    if (xRightControlTaskHandle == NULL) {
+        ESP_LOGE("CTRL_TASK", "Failed to create task...");
+        return;
+    }
+    configASSERT(xLeftControlTaskHandle); ///< Check if the task was created successfully
+    if (xLeftControlTaskHandle == NULL) {
+        ESP_LOGE("CTRL_TASK", "Failed to create task...");
+        return;
+    }
+    configASSERT(xBackControlTaskHandle); ///< Check if the task was created successfully
+    if (xBackControlTaskHandle == NULL) {
+        ESP_LOGE("CTRL_TASK", "Failed to create task...");
+        return;
+    }
 
     // xTaskCreatePinnedToCore(vTaskDistance, "distance_task", 2048, &distance_params, 8, &xDistanceTaskHandle, 1); ///< Create the task to keep track of distance
     // configASSERT(xDistanceTaskHandle); ///< Check if the task was created successfully
@@ -449,26 +484,20 @@ void app_main(void)
     //     return;
     // }
 
-    // ESP_LOGI("TASKS", "Right encoder handle: 0x%04X", gAs5600R.out); ///< Log the task handles
-    // xTaskCreatePinnedToCore(vTaskEncoder, "right_encoder_task", 4096, &right_control_params, 8, &xRightEncoderTaskHandle, 0); ///< Create the task to read from right encoder
-    // xTaskCreatePinnedToCore(vTaskEncoder, "left_encoder_task", 4096, &left_control_params, 8, &xLeftEncoderTaskHandle, 0);    ///< Create the task to read from left encoder
-    // xTaskCreatePinnedToCore(vTaskEncoder, "back_encoder_task", 4096, &back_control_params, 8, &xBackEncoderTaskHandle, 0);    ///< Create the task to read from back encoder
+    ///<--------------------------------------------------------
 
-    // configASSERT(xRightEncoderTaskHandle); ///< Check if the task was created successfully
-    // if (xRightEncoderTaskHandle == NULL) {
-    //     ESP_LOGE("ENCODER_TASK", "Failed to create task...");
-    //     return;
-    // }
-    // configASSERT(xLeftEncoderTaskHandle); ///< Check if the task was created successfully
-    // if (xLeftEncoderTaskHandle == NULL) {
-    //     ESP_LOGE("ENCODER_TASK", "Failed to create task...");
-    //     return;
-    // }
-    // configASSERT(xBackEncoderTaskHandle); ///< Check if the task was created successfully
-    // if (xBackEncoderTaskHandle == NULL) {
-    //     ESP_LOGE("ENCODER_TASK", "Failed to create task...");
-    //     return;
-    // }
-    ///<--------------------------------------------------
+    ///<-------------- WiFi and Autotuning (Disabled) ----------
+    // NOTE: WiFi initialization can interfere with ADC operations
+    // To enable WiFi and autotuning:
+    // 1. Uncomment wifi_init() below
+    // 2. Uncomment autotuning_task creation
+    // 3. Ensure sufficient delay after ADC init (already added above)
+    
+    
+    vTaskDelay(pdMS_TO_TICKS(2000)); ///< Wait for WiFi to stabilize
+    
+    ESP_LOGI(TAG, "Creating autotuning task...");
+    configASSERT(xTaskCreatePinnedToCore(autotuning_task, "autotuning", 8192, NULL, 7, NULL, 0));
+    ///<--------------------------------------------------------
 
 }

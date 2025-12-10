@@ -40,12 +40,9 @@ typedef enum {
 // Robot sensor data structure (customize based on your sensors)
 typedef struct {
     uint32_t timestamp_ms;      // Timestamp in milliseconds
-    float motor_speed[3];        // Motor speeds (3 wheels)
-    float motor_current[3];      // Motor currents
-    float target_speed[3];       // Target speeds
-    float position_x;            // Robot position X
-    float position_y;            // Robot position Y
-    float heading;               // Robot heading (radians)
+    float motor_state[3];       // Motor states (3 wheels)
+    float motor_setpoint[3];    // Motor setpoints
+    float errors[3][3];        // Error history for each motor
 } __attribute__((packed)) robot_sample_t;
 
 // Data batch structure

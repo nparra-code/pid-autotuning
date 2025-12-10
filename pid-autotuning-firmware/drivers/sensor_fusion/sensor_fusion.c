@@ -69,8 +69,13 @@ void estimate_velocity_encoder(encoder_data_t * encoder_data){
     // printf("Angle: %0.2f r\tLast Angle: %0.2f r\tDistance: %0.2f cm\t", angle, encoder_data->angle_prev, dist); ///< Log message
 
     if(fabsf(dist) < 0.5){ ///< If distance is less than 0.5 cm update the velocity
+
         if(fabsf(dist) > 0.25) encoder_data->distance += fabsf(dist); ///< Store the distance
+        
         float vel =  (dist / encoder_data->radio) / encoder_data->time_interval, beta = 0.9f; ///< Calculate the velocity in cm/s
+
+        encoder_data->state = beta * encoder_data->last_st + (1 - beta) * (angle - encoder_data->angle_prev) / encoder_data->time_interval; ///< Update the state variable (angular velocity)
+        
         encoder_data->velocity = beta * encoder_data->last_vel + (1 - beta) * vel; ///< Pass the velocity through a low-pass filter
         // printf("ENC Dist: %0.2f\tVelocity: %0.2f cm/s\n", dist, encoder_data->velocity); ///< Log message
 
@@ -80,6 +85,7 @@ void estimate_velocity_encoder(encoder_data_t * encoder_data){
         encoder_data->last_vel = encoder_data->velocity; ///< Update the last velocity value
     }
     encoder_data->angle_prev = angle; ///< Update the previous angle value
+    encoder_data->last_st = encoder_data->state; ///< Update the last state variable
 }
 
 void estimate_velocity_lidar(lidar_data_t * lidar_data, uint16_t distance, float time_interval){

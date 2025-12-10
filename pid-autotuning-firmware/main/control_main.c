@@ -86,6 +86,19 @@ void vTaskEncoder(void * pvParameters) {
     // Get task name
     const char *task_name = pcTaskGetName(xTask);
 
+    // CRITICAL: Wait for ADC to be fully initialized before first read
+    // This prevents timeout errors during ADC calibration
+    vTaskDelay(pdMS_TO_TICKS(1500)); // Wait 1.5 seconds for ADC to stabilize
+    
+    // Verify ADC is calibrated before proceeding
+    if (!params->gStruct->adc_handle.is_calibrated) {
+        ESP_LOGE(task_name, "ERROR: ADC not calibrated! Task cannot proceed.");
+        vTaskDelete(NULL);
+        return;
+    }
+    
+    ESP_LOGI(task_name, "ADC ready, starting encoder readings");
+
     ///<-------------- Get angle through ADC -------------
     while (1) {
 
@@ -148,13 +161,13 @@ void vTaskControl( void * pvParameters ){
         bldc_set_duty(params->pwm_motor, output); ///< Set the duty cycle to the output of the PID controller
 
         // Log every 100ms because of the ESP_LOGI overhead
-        static int ctr = 0;
-        if (++ctr >= 100 / SAMPLE_TIME) { 
-            // ESP_LOGI(task_name, "Input: %.2f\tOutput: %.2f", est_velocity, output); ///< Log the PID parameters
-            ESP_LOGI(task_name, "Input: %.2f\tOutput: %.2f\tSetpoint: %.2f", est_velocity, output, setpoint); ///< Log the PID parameters
-            // ESP_LOGI("CTRL_TASK", "X_vel: %.2f\tY_vel: %.2f", x_vel, y_vel); ///< Log the generalized velocities
-            ctr = 0;
-        }
+        // static int ctr = 0;
+        // if (++ctr >= 100 / SAMPLE_TIME) { 
+        //     // ESP_LOGI(task_name, "Input: %.2f\tOutput: %.2f", est_velocity, output); ///< Log the PID parameters
+        //     ESP_LOGI(task_name, "Input: %.2f\tOutput: %.2f\tSetpoint: %.2f", est_velocity, output, setpoint); ///< Log the PID parameters
+        //     // ESP_LOGI("CTRL_TASK", "X_vel: %.2f\tY_vel: %.2f", x_vel, y_vel); ///< Log the generalized velocities
+        //     ctr = 0;
+        // }
         
         vTaskDelay(SAMPLE_TIME / portTICK_PERIOD_MS); ///< Wait for 2 ms
     }
