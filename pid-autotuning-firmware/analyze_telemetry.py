@@ -26,124 +26,276 @@ def load_metadata(meta_path):
             return json.load(f)
     return None
 
-def plot_motor_speeds(df, output_dir=None):
-    """Plot motor speeds over time"""
-    plt.figure(figsize=(14, 6))
+def plot_individual_motor_tracking(df, output_dir=None):
+    """Plot individual motor tracking: state vs setpoint for each wheel"""
+    fig, axes = plt.subplots(3, 1, figsize=(14, 10))
     
-    # Plot actual speeds
-    plt.subplot(2, 1, 1)
-    plt.plot(df['timestamp_ms'] / 1000, df['motor_speed_0'], label='Motor 0', alpha=0.7)
-    plt.plot(df['timestamp_ms'] / 1000, df['motor_speed_1'], label='Motor 1', alpha=0.7)
-    plt.plot(df['timestamp_ms'] / 1000, df['motor_speed_2'], label='Motor 2', alpha=0.7)
+    motor_names = ['Right Wheel (Motor 0)', 'Left Wheel (Motor 1)', 'Back Wheel (Motor 2)']
+    
+    for i, (ax, name) in enumerate(zip(axes, motor_names)):
+        time = df['timestamp_ms'] / 1000
+        actual = df[f'motor_state_{i}']
+        setpoint = df[f'motor_setpoint_{i}']
+        
+        ax.plot(time, actual, label='Actual', alpha=0.8, linewidth=1.5, color='C0')
+        ax.plot(time, setpoint, label='Setpoint', alpha=0.7, linewidth=1.5, 
+                linestyle='--', color='C1')
+        
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel('Angular Velocity (rad/s)')
+        ax.set_title(name)
+        ax.legend(loc='upper right')
+        ax.grid(True, alpha=0.3)
+        
+        # Add shaded error region
+        error = setpoint - actual
+        ax.fill_between(time, setpoint, actual, alpha=0.2, color='red', 
+                        label='Error region')
+    
+    plt.tight_layout()
+    
+    if output_dir:
+        plt.savefig(os.path.join(output_dir, 'individual_motor_tracking.png'), dpi=150)
+        print(f"Saved: individual_motor_tracking.png")
+    
+    plt.show()
+
+def plot_errors(df, output_dir=None):
+    """Plot PID errors over time for all motors"""
+    plt.figure(figsize=(14, 10))
+    
+    # Motor 0 errors
+    plt.subplot(3, 1, 1)
+    plt.plot(df['timestamp_ms'] / 1000, df['error_0_k'], label='Error(k)', alpha=0.7)
+    plt.plot(df['timestamp_ms'] / 1000, df['error_0_k1'], label='Error(k-1)', alpha=0.5)
+    plt.plot(df['timestamp_ms'] / 1000, df['error_0_k2'], label='Error(k-2)', alpha=0.3)
     plt.xlabel('Time (s)')
-    plt.ylabel('Speed (units)')
-    plt.title('Motor Speeds')
+    plt.ylabel('Error')
+    plt.title('Motor 0: PID Error History')
     plt.legend()
     plt.grid(True, alpha=0.3)
     
-    # Plot target vs actual for motor 0
-    plt.subplot(2, 1, 2)
-    plt.plot(df['timestamp_ms'] / 1000, df['motor_speed_0'], label='Actual', alpha=0.7)
-    plt.plot(df['timestamp_ms'] / 1000, df['target_speed_0'], label='Target', alpha=0.7, linestyle='--')
+    # Motor 1 errors
+    plt.subplot(3, 1, 2)
+    plt.plot(df['timestamp_ms'] / 1000, df['error_1_k'], label='Error(k)', alpha=0.7)
+    plt.plot(df['timestamp_ms'] / 1000, df['error_1_k1'], label='Error(k-1)', alpha=0.5)
+    plt.plot(df['timestamp_ms'] / 1000, df['error_1_k2'], label='Error(k-2)', alpha=0.3)
     plt.xlabel('Time (s)')
-    plt.ylabel('Speed (units)')
-    plt.title('Motor 0: Target vs Actual Speed')
+    plt.ylabel('Error')
+    plt.title('Motor 1: PID Error History')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    # Motor 2 errors
+    plt.subplot(3, 1, 3)
+    plt.plot(df['timestamp_ms'] / 1000, df['error_2_k'], label='Error(k)', alpha=0.7)
+    plt.plot(df['timestamp_ms'] / 1000, df['error_2_k1'], label='Error(k-1)', alpha=0.5)
+    plt.plot(df['timestamp_ms'] / 1000, df['error_2_k2'], label='Error(k-2)', alpha=0.3)
+    plt.xlabel('Time (s)')
+    plt.ylabel('Error')
+    plt.title('Motor 2: PID Error History')
     plt.legend()
     plt.grid(True, alpha=0.3)
     
     plt.tight_layout()
     
     if output_dir:
-        plt.savefig(os.path.join(output_dir, 'motor_speeds.png'), dpi=150)
-        print(f"Saved: motor_speeds.png")
+        plt.savefig(os.path.join(output_dir, 'pid_errors.png'), dpi=150)
+        print(f"Saved: pid_errors.png")
     
     plt.show()
 
-def plot_motor_currents(df, output_dir=None):
-    """Plot motor currents over time"""
+def plot_error_magnitude(df, output_dir=None):
+    """Plot overall error magnitude for each motor"""
     plt.figure(figsize=(12, 6))
     
-    plt.plot(df['timestamp_ms'] / 1000, df['motor_current_0'], label='Motor 0', alpha=0.7)
-    plt.plot(df['timestamp_ms'] / 1000, df['motor_current_1'], label='Motor 1', alpha=0.7)
-    plt.plot(df['timestamp_ms'] / 1000, df['motor_current_2'], label='Motor 2', alpha=0.7)
+    # Calculate error magnitudes (absolute values of current error)
+    error_mag_0 = np.abs(df['error_0_k'])
+    error_mag_1 = np.abs(df['error_1_k'])
+    error_mag_2 = np.abs(df['error_2_k'])
+    
+    plt.plot(df['timestamp_ms'] / 1000, error_mag_0, label='Motor 0', alpha=0.7)
+    plt.plot(df['timestamp_ms'] / 1000, error_mag_1, label='Motor 1', alpha=0.7)
+    plt.plot(df['timestamp_ms'] / 1000, error_mag_2, label='Motor 2', alpha=0.7)
     
     plt.xlabel('Time (s)')
-    plt.ylabel('Current (A)')
-    plt.title('Motor Currents')
+    plt.ylabel('|Error|')
+    plt.title('PID Error Magnitude (Absolute Values)')
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     
     if output_dir:
-        plt.savefig(os.path.join(output_dir, 'motor_currents.png'), dpi=150)
-        print(f"Saved: motor_currents.png")
+        plt.savefig(os.path.join(output_dir, 'error_magnitude.png'), dpi=150)
+        print(f"Saved: error_magnitude.png")
     
     plt.show()
 
-def plot_trajectory(df, output_dir=None):
-    """Plot robot trajectory"""
-    plt.figure(figsize=(10, 10))
+def calculate_robot_trajectory(df, wheel_radius=0.03, use_setpoint=False):
+    """
+    Calculate robot trajectory using 3-wheel omni kinematics
     
-    # Color by time
-    scatter = plt.scatter(df['position_x'], df['position_y'], 
-                         c=df['timestamp_ms'] / 1000, 
-                         cmap='viridis', 
-                         s=2, 
-                         alpha=0.6)
+    Args:
+        df: DataFrame with motor states/setpoints
+        wheel_radius: Wheel radius in meters (default 3cm = 0.03m)
+        use_setpoint: If True, use setpoints; if False, use actual states
     
-    # Mark start and end
-    plt.plot(df['position_x'].iloc[0], df['position_y'].iloc[0], 
-             'go', markersize=10, label='Start')
-    plt.plot(df['position_x'].iloc[-1], df['position_y'].iloc[-1], 
-             'ro', markersize=10, label='End')
+    Returns:
+        x, y, theta: Robot position and orientation arrays
     
-    plt.colorbar(scatter, label='Time (s)')
-    plt.xlabel('X Position')
-    plt.ylabel('Y Position')
-    plt.title('Robot Trajectory')
-    plt.legend()
-    plt.axis('equal')
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
+    Three-wheel omni robot kinematics:
+    - Wheels are arranged at 120° intervals (0°, 120°, 240°)
+    - Motor 0 (Right): 0° 
+    - Motor 1 (Left): 120°
+    - Motor 2 (Back): 240°
     
-    if output_dir:
-        plt.savefig(os.path.join(output_dir, 'trajectory.png'), dpi=150)
-        print(f"Saved: trajectory.png")
+    Forward kinematics from wheel velocities to robot velocity:
+    [vx]     [  cos(0°)    cos(120°)   cos(240°)  ]   [w0]
+    [vy]  = r[ -sin(0°)   -sin(120°)  -sin(240°)  ] * [w1]
+    [wz]     [   1/L         1/L          1/L      ]   [w2]
     
-    plt.show()
+    Where:
+    - r = wheel radius
+    - L = distance from wheel to robot center
+    - w0, w1, w2 = wheel angular velocities
+    """
+    
+    # Robot configuration
+    r = wheel_radius  # Wheel radius in meters
+    
+    # Wheel angles (in radians)
+    # Motor 0 (Right wheel): 0° (pointing right)
+    # Motor 1 (Left wheel): 120° (pointing left-forward)
+    # Motor 2 (Back wheel): 240° (pointing left-backward)
+    wheel_angles = np.array([0, 2*np.pi/3, 4*np.pi/3])  # 0°, 120°, 240°
+    
+    # Get wheel velocities
+    suffix = 'setpoint' if use_setpoint else 'state'
+    w0 = df[f'motor_{suffix}_0'].values  # Right wheel
+    w1 = df[f'motor_{suffix}_1'].values  # Left wheel
+    w2 = df[f'motor_{suffix}_2'].values  # Back wheel
+    
+    # Time vector
+    time = df['timestamp_ms'].values / 1000.0  # Convert to seconds
+    dt = np.diff(time)
+    dt = np.append(dt, dt[-1])  # Extend to match length
+    
+    # Initialize position and orientation
+    x = np.zeros(len(df))
+    y = np.zeros(len(df))
+    theta = np.zeros(len(df))
+    
+    # Forward kinematics matrix (simplified, assuming L is normalized)
+    # For a proper omni robot: vx = r * (w0*cos(0) + w1*cos(120) + w2*cos(240)) / 3
+    #                          vy = r * (-w0*sin(0) - w1*sin(120) - w2*sin(240)) / 3
+    
+    for i in range(1, len(df)):
+        # Calculate robot velocities in robot frame
+        vx_robot = r * (w0[i] * np.cos(wheel_angles[0]) + 
+                       w1[i] * np.cos(wheel_angles[1]) + 
+                       w2[i] * np.cos(wheel_angles[2])) / 3.0
+        
+        vy_robot = r * (-w0[i] * np.sin(wheel_angles[0]) - 
+                       w1[i] * np.sin(wheel_angles[1]) - 
+                       w2[i] * np.sin(wheel_angles[2])) / 3.0
+        
+        # For rotation, assuming all wheels contribute equally (simplified)
+        # In a real system, this depends on the wheel base radius L
+        omega = 0  # No rotation info without knowing L, keep heading constant
+        
+        # Transform to global frame
+        vx_global = vx_robot * np.cos(theta[i-1]) - vy_robot * np.sin(theta[i-1])
+        vy_global = vx_robot * np.sin(theta[i-1]) + vy_robot * np.cos(theta[i-1])
+        
+        # Integrate position
+        x[i] = x[i-1] + vx_global * dt[i]
+        y[i] = y[i-1] + vy_global * dt[i]
+        theta[i] = theta[i-1] + omega * dt[i]
+    
+    return x, y, theta
 
-def plot_heading(df, output_dir=None):
-    """Plot robot heading over time"""
-    plt.figure(figsize=(12, 6))
+def plot_robot_trajectory(df, output_dir=None):
+    """Plot robot trajectory (desired vs actual)"""
+    wheel_radius = 0.03  # 3cm wheels
     
-    # Convert heading from radians to degrees
-    heading_deg = np.rad2deg(df['heading'])
+    # Calculate desired trajectory (from setpoints)
+    x_desired, y_desired, theta_desired = calculate_robot_trajectory(df, wheel_radius, use_setpoint=True)
     
-    plt.plot(df['timestamp_ms'] / 1000, heading_deg, alpha=0.7)
-    plt.xlabel('Time (s)')
-    plt.ylabel('Heading (degrees)')
-    plt.title('Robot Heading')
-    plt.grid(True, alpha=0.3)
+    # Calculate actual trajectory (from states)
+    x_actual, y_actual, theta_actual = calculate_robot_trajectory(df, wheel_radius, use_setpoint=False)
+    
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 7))
+    
+    # Plot 1: Trajectory comparison
+    time = df['timestamp_ms'] / 1000
+    
+    # Desired path
+    ax1.plot(x_desired, y_desired, 'b--', alpha=0.7, linewidth=2, label='Desired Path')
+    ax1.scatter(x_desired[0], y_desired[0], color='blue', s=100, marker='o', 
+               label='Start (Desired)', zorder=5)
+    ax1.scatter(x_desired[-1], y_desired[-1], color='blue', s=100, marker='s', 
+               label='End (Desired)', zorder=5)
+    
+    # Actual path
+    sc = ax1.scatter(x_actual, y_actual, c=time, cmap='viridis', s=10, alpha=0.6, 
+                    label='Actual Path', zorder=3)
+    ax1.scatter(x_actual[0], y_actual[0], color='green', s=100, marker='o', 
+               label='Start (Actual)', zorder=5)
+    ax1.scatter(x_actual[-1], y_actual[-1], color='red', s=100, marker='s', 
+               label='End (Actual)', zorder=5)
+    
+    ax1.set_xlabel('X Position (m)')
+    ax1.set_ylabel('Y Position (m)')
+    ax1.set_title('Robot Trajectory: Desired vs Actual')
+    ax1.legend(loc='best')
+    ax1.grid(True, alpha=0.3)
+    ax1.axis('equal')
+    plt.colorbar(sc, ax=ax1, label='Time (s)')
+    
+    # Plot 2: Trajectory error over time
+    position_error = np.sqrt((x_desired - x_actual)**2 + (y_desired - y_actual)**2)
+    
+    ax2.plot(time, position_error * 100, linewidth=1.5)  # Convert to cm
+    ax2.fill_between(time, 0, position_error * 100, alpha=0.3)
+    ax2.set_xlabel('Time (s)')
+    ax2.set_ylabel('Position Error (cm)')
+    ax2.set_title('Trajectory Tracking Error')
+    ax2.grid(True, alpha=0.3)
+    
+    # Add statistics text
+    mean_error = np.mean(position_error) * 100
+    max_error = np.max(position_error) * 100
+    final_error = position_error[-1] * 100
+    
+    stats_text = f'Mean Error: {mean_error:.2f} cm\n'
+    stats_text += f'Max Error: {max_error:.2f} cm\n'
+    stats_text += f'Final Error: {final_error:.2f} cm'
+    
+    ax2.text(0.02, 0.98, stats_text, transform=ax2.transAxes,
+            verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+    
     plt.tight_layout()
     
     if output_dir:
-        plt.savefig(os.path.join(output_dir, 'heading.png'), dpi=150)
-        print(f"Saved: heading.png")
+        plt.savefig(os.path.join(output_dir, 'robot_trajectory.png'), dpi=150)
+        print(f"Saved: robot_trajectory.png")
     
     plt.show()
 
 def calculate_tracking_error(df):
-    """Calculate tracking error statistics"""
+    """Calculate tracking error statistics from recorded errors"""
     errors = []
     for i in range(3):
-        error = df[f'target_speed_{i}'] - df[f'motor_speed_{i}']
+        error = df[f'error_{i}_k']  # Current error values
         mae = np.mean(np.abs(error))
         rmse = np.sqrt(np.mean(error**2))
         errors.append({
             'motor': i,
             'mae': mae,
             'rmse': rmse,
-            'max_error': np.max(np.abs(error))
+            'max_error': np.max(np.abs(error)),
+            'mean_error': np.mean(error),
+            'std_error': np.std(error)
         })
     
     return errors
@@ -168,30 +320,25 @@ def print_statistics(df, metadata=None):
     print(f"  Time range: {df['timestamp_ms'].min()/1000:.2f}s - {df['timestamp_ms'].max()/1000:.2f}s")
     print(f"  Duration: {(df['timestamp_ms'].max() - df['timestamp_ms'].min())/1000:.2f}s")
     
-    print(f"\nMotor Speeds (avg ± std):")
+    print(f"\nMotor States (avg ± std):")
     for i in range(3):
-        speed = df[f'motor_speed_{i}']
-        print(f"  Motor {i}: {speed.mean():.2f} ± {speed.std():.2f}")
+        state = df[f'motor_state_{i}']
+        print(f"  Motor {i}: {state.mean():.2f} ± {state.std():.2f}")
     
-    print(f"\nMotor Currents (avg ± std):")
+    print(f"\nMotor Setpoints (avg ± std):")
     for i in range(3):
-        current = df[f'motor_current_{i}']
-        print(f"  Motor {i}: {current.mean():.2f} ± {current.std():.2f} A")
+        setpoint = df[f'motor_setpoint_{i}']
+        print(f"  Motor {i}: {setpoint.mean():.2f} ± {setpoint.std():.2f}")
     
-    print(f"\nTracking Error Statistics:")
+    print(f"\nPID Error Statistics:")
     errors = calculate_tracking_error(df)
     for err in errors:
         print(f"  Motor {err['motor']}:")
-        print(f"    MAE:  {err['mae']:.4f}")
-        print(f"    RMSE: {err['rmse']:.4f}")
-        print(f"    Max:  {err['max_error']:.4f}")
-    
-    print(f"\nPosition Range:")
-    print(f"  X: [{df['position_x'].min():.2f}, {df['position_x'].max():.2f}]")
-    print(f"  Y: [{df['position_y'].min():.2f}, {df['position_y'].max():.2f}]")
-    
-    print(f"\nHeading Range:")
-    print(f"  {np.rad2deg(df['heading'].min()):.2f}° - {np.rad2deg(df['heading'].max()):.2f}°")
+        print(f"    Mean Error:  {err['mean_error']:+.4f}")
+        print(f"    Std Dev:     {err['std_error']:.4f}")
+        print(f"    MAE:         {err['mae']:.4f}")
+        print(f"    RMSE:        {err['rmse']:.4f}")
+        print(f"    Max Error:   {err['max_error']:.4f}")
     
     print("="*60 + "\n")
 
@@ -246,10 +393,14 @@ def main():
     
     # Generate plots
     print("Generating plots...")
-    plot_motor_speeds(df, output_dir)
-    plot_motor_currents(df, output_dir)
-    plot_trajectory(df, output_dir)
-    plot_heading(df, output_dir)
+    print("  1. Individual motor tracking...")
+    plot_individual_motor_tracking(df, output_dir)
+    print("  2. Robot trajectory...")
+    plot_robot_trajectory(df, output_dir)
+    print("  3. PID errors...")
+    plot_errors(df, output_dir)
+    print("  4. Error magnitude...")
+    plot_error_magnitude(df, output_dir)
     
     print(f"\nAnalysis complete! Plots saved to: {output_dir}")
 

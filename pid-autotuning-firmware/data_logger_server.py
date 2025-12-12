@@ -28,20 +28,25 @@ PROTOCOL_VERSION = 1
 PORT = 8888
 
 # Data structures matching ESP32 side
-ROBOT_SAMPLE_STRUCT = struct.Struct('<I12f')  # timestamp + 12 floats
-# I=uint32, f=float (timestamp, 3 motor speeds, 3 currents, 3 targets, 
-#                     pos_x, pos_y, heading)
+ROBOT_SAMPLE_STRUCT = struct.Struct('<I15f')  # timestamp + 15 floats
+# I=uint32, f=float
+# timestamp_ms (uint32)
+# motor_state[3] (3 floats) - current motor states
+# motor_setpoint[3] (3 floats) - motor setpoints/targets
+# errors[3][3] (9 floats) - error history for each motor [motor_idx][time_k]
+#   where time_k: 0=current(k), 1=previous(k-1), 2=two_steps_back(k-2)
 
 HEADER_STRUCT = struct.Struct('<BBHI')  # type, version, length, checksum (unsigned)
 
 # Data logging configuration
 LOG_DIR = "telemetry_logs"
 CSV_HEADER = [
-    "timestamp_ms", 
-    "motor_speed_0", "motor_speed_1", "motor_speed_2",
-    "motor_current_0", "motor_current_1", "motor_current_2",
-    "target_speed_0", "target_speed_1", "target_speed_2",
-    "position_x", "position_y", "heading"
+    "timestamp_ms",
+    "motor_state_0", "motor_state_1", "motor_state_2",
+    "motor_setpoint_0", "motor_setpoint_1", "motor_setpoint_2",
+    "error_0_k", "error_0_k1", "error_0_k2",
+    "error_1_k", "error_1_k1", "error_1_k2",
+    "error_2_k", "error_2_k1", "error_2_k2"
 ]
 
 
