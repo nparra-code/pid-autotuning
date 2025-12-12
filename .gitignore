@@ -59,3 +59,7 @@ build/
 .vscode/
 sdkconfig.old
 .devcontainer/
+
+___pycache__/
+*.pyc
+telemetry_logs/
