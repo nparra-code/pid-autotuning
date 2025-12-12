@@ -8,7 +8,7 @@ file(GLOB SRCS_SENSOR_FUSION "../drivers/sensor_fusion/*.c")
 idf_component_register(SRCS "firmware_main.c" "control_main.c" "mov_calculation.c" "telemetry.c" ${SRCS_AS5600} ${SRCS_PLATFORM} ${SRCS_BLDC_PWM} ${SRCS_PID_LIB} ${SRCS_SENSOR_FUSION}
                        INCLUDE_DIRS "." "../sensors/AS5600_HAL_Library/include" "../platform/include"
                        "../drivers/bldc_pwm/include" "../drivers/pid_lib/include" "../drivers/sensor_fusion/include"
-                        "../drivers/wifi_lib/include" "./include"
+                        "./include"
                         
                         REQUIRES driver freertos esp_timer nvs_flash esp_adc esp_wifi esp_netif
                     )
