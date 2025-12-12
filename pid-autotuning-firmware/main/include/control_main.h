@@ -67,6 +67,15 @@ typedef struct {
 } control_params_t;
 
 typedef struct {
+    AS5600_t * right_gStruct;             ///< Velocity estimation from right encoder in cm/s
+    AS5600_t * left_gStruct;              ///< Velocity estimation from left encoder in cm/s
+    AS5600_t * back_gStruct;              ///< Velocity estimation from back encoder in cm/s
+    encoder_data_t * right_sensor_data;   ///< Encoder data structure for right wheel
+    encoder_data_t * left_sensor_data;    ///< Encoder data structure for left wheel
+    encoder_data_t * back_sensor_data;    ///< Encoder data structure for back wheel
+} encoder_params_t;
+
+typedef struct {
     float target_distance; ///< Distance measurement
     encoder_data_t * encoder_data_right; ///< Encoder data structure for right wheel
     encoder_data_t * encoder_data_left;  ///< Encoder data structure for left wheel
@@ -78,6 +87,8 @@ typedef struct {
  * @brief Task to read from encoder
  */
 void vTaskEncoder(void * pvParameters);
+
+void vTaskEncoders(void * pvParameters);
 
 /**
  * @brief Task to control the wheel

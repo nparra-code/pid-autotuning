@@ -36,7 +36,7 @@ static const char *TAG = "MAIN";
 
 static EventGroupHandle_t s_wifi_event_group;
 static int s_retry_num = 0;
-#define ESP_MAXIMUM_RETRY  5
+#define ESP_MAXIMUM_RETRY  20
 
 // Your WiFi credentials
 #define WIFI_SSID "TP-Link_CCAF"
@@ -95,6 +95,9 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
 
 // WiFi initialization with event handlers
 static void wifi_init(void) {
+    // Create event group for WiFi events
+    s_wifi_event_group = xEventGroupCreate();
+    
     // Initialize NVS
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -115,6 +118,21 @@ static void wifi_init(void) {
     // Create default WiFi station
     esp_netif_create_default_wifi_sta();
     vTaskDelay(pdMS_TO_TICKS(100));
+    
+    // Register event handlers for WiFi and IP events
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(
+        WIFI_EVENT,
+        ESP_EVENT_ANY_ID,
+        &wifi_event_handler,
+        NULL,
+        NULL));
+    
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(
+        IP_EVENT,
+        IP_EVENT_STA_GOT_IP,
+        &wifi_event_handler,
+        NULL,
+        NULL));
     
     // Initialize WiFi with default config
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -142,10 +160,24 @@ static void wifi_init(void) {
         ESP_LOGE(TAG, "Failed to start Wi-Fi: %s", esp_err_to_name(ret));
         return;
     }
-    else
-    {
-        ESP_LOGI(TAG, "Wi-Fi started successfully");
-        esp_wifi_connect();
+    
+    ESP_LOGI(TAG, "Wi-Fi started successfully, waiting for connection...");
+    
+    // Wait for WiFi connection with 30 second timeout
+    EventBits_t bits = xEventGroupWaitBits(
+        s_wifi_event_group,
+        WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
+        pdFALSE,
+        pdFALSE,
+        pdMS_TO_TICKS(30000));
+    
+    // Check which event occurred
+    if (bits & WIFI_CONNECTED_BIT) {
+        ESP_LOGI(TAG, "✓ Connected to WiFi SSID: %s", WIFI_SSID);
+    } else if (bits & WIFI_FAIL_BIT) {
+        ESP_LOGE(TAG, "✗ Failed to connect to WiFi after %d attempts", ESP_MAXIMUM_RETRY);
+    } else {
+        ESP_LOGE(TAG, "✗ WiFi connection timeout (30 seconds)");
     }
 }
 
@@ -408,6 +440,15 @@ void app_main(void)
         .vel_selection = 1 ///< Velocity selection for the robot, can be set later
     };
 
+    static encoder_params_t encoder_params = {
+        .right_gStruct = &gAs5600R,
+        .left_gStruct = &gAs5600L,
+        .back_gStruct = &gAs5600B,
+        .right_sensor_data = &right_encoder_data,
+        .left_sensor_data = &left_encoder_data,
+        .back_sensor_data = &back_encoder_data
+    };
+
     static distance_params_t distance_params = {
         .target_distance = 5.0f, ///< Set the target distance to 100 cm
         .encoder_data_right = &right_encoder_data,
@@ -417,7 +458,7 @@ void app_main(void)
 
     ///<--------------------------------------------------
 
-    TaskHandle_t xRightEncoderTaskHandle, xLeftEncoderTaskHandle, xBackEncoderTaskHandle; ///< Task handles for encoders
+    TaskHandle_t xRightEncoderTaskHandle, xLeftEncoderTaskHandle, xBackEncoderTaskHandle, xEncodersTaskHandle; ///< Task handles for encoders
     
     TaskHandle_t xRightControlTaskHandle, xLeftControlTaskHandle, xBackControlTaskHandle, xDistanceTaskHandle; ///< Task handles for control tasks
 
@@ -425,25 +466,39 @@ void app_main(void)
 
     ///<-------------- Create the encoders tasks ---------------
 
-    xTaskCreatePinnedToCore(vTaskEncoder, "right_encoder_task", 4096, &right_control_params, 8, &xRightEncoderTaskHandle, 0); ///< Create the task to read from right encoder
-    xTaskCreatePinnedToCore(vTaskEncoder, "left_encoder_task", 4096, &left_control_params, 8, &xLeftEncoderTaskHandle, 0);    ///< Create the task to read from left encoder
-    xTaskCreatePinnedToCore(vTaskEncoder, "back_encoder_task", 4096, &back_control_params, 8, &xBackEncoderTaskHandle, 0);    ///< Create the task to read from back encoder
+    // xTaskCreatePinnedToCore(vTaskEncoder, "right_encoder_task", 4096, &right_control_params, 8, &xRightEncoderTaskHandle, 0); ///< Create the task to read from right encoder
+    // xTaskCreatePinnedToCore(vTaskEncoder, "left_encoder_task", 4096, &left_control_params, 8, &xLeftEncoderTaskHandle, 0);    ///< Create the task to read from left encoder
+    // xTaskCreatePinnedToCore(vTaskEncoder, "back_encoder_task", 4096, &back_control_params, 8, &xBackEncoderTaskHandle, 0);    ///< Create the task to read from back encoder
 
-    configASSERT(xRightEncoderTaskHandle); ///< Check if the task was created successfully
-    if (xRightEncoderTaskHandle == NULL) {
-        ESP_LOGE("ENCODER_TASK", "Failed to create task...");
+    // configASSERT(xRightEncoderTaskHandle); ///< Check if the task was created successfully
+    // if (xRightEncoderTaskHandle == NULL) {
+    //     ESP_LOGE("ENCODER_TASK", "Failed to create task...");
+    //     return;
+    // }
+    // configASSERT(xLeftEncoderTaskHandle); ///< Check if the task was created successfully
+    // if (xLeftEncoderTaskHandle == NULL) {
+    //     ESP_LOGE("ENCODER_TASK", "Failed to create task...");
+    //     return;
+    // }
+    // configASSERT(xBackEncoderTaskHandle); ///< Check if the task was created successfully
+    // if (xBackEncoderTaskHandle == NULL) {
+    //     ESP_LOGE("ENCODER_TASK", "Failed to create task...");
+    //     return;
+    // }
+
+    xTaskCreatePinnedToCore(vTaskEncoders, "encoders_task", 12288, &encoder_params, 8, &xEncodersTaskHandle, 0); ///< Create the task to read from all encoders
+    configASSERT(xEncodersTaskHandle); ///< Check if the task was created successfully
+    if (xEncodersTaskHandle == NULL) {
+        ESP_LOGE("ENCODERS_TASK", "Failed to create task...");
         return;
     }
-    configASSERT(xLeftEncoderTaskHandle); ///< Check if the task was created successfully
-    if (xLeftEncoderTaskHandle == NULL) {
-        ESP_LOGE("ENCODER_TASK", "Failed to create task...");
-        return;
-    }
-    configASSERT(xBackEncoderTaskHandle); ///< Check if the task was created successfully
-    if (xBackEncoderTaskHandle == NULL) {
-        ESP_LOGE("ENCODER_TASK", "Failed to create task...");
-        return;
-    }
+    ///<--------------------------------------------------------
+
+    ///<-------------- WiFi and Autotuning ----------
+
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    ESP_LOGI(TAG, "Creating autotuning task...");
+    configASSERT(xTaskCreatePinnedToCore(autotuning_task, "autotuning", 8192, NULL, 7, NULL, 0));
     ///<--------------------------------------------------------
 
     // vTaskDelay(5000 / portTICK_PERIOD_MS); ///< Wait for 1 second to ensure all peripherals are initialized
@@ -477,27 +532,17 @@ void app_main(void)
         return;
     }
 
-    // xTaskCreatePinnedToCore(vTaskDistance, "distance_task", 2048, &distance_params, 8, &xDistanceTaskHandle, 1); ///< Create the task to keep track of distance
-    // configASSERT(xDistanceTaskHandle); ///< Check if the task was created successfully
-    // if (xDistanceTaskHandle == NULL) {
-    //     ESP_LOGE("DISTANCE_TASK", "Failed to create task...");
-    //     return;
-    // }
+    xTaskCreatePinnedToCore(vTaskDistance, "distance_task", 2048, &distance_params, 8, &xDistanceTaskHandle, 1); ///< Create the task to keep track of distance
+    configASSERT(xDistanceTaskHandle); ///< Check if the task was created successfully
+    if (xDistanceTaskHandle == NULL) {
+        ESP_LOGE("DISTANCE_TASK", "Failed to create task...");
+        return;
+    }
 
     ///<--------------------------------------------------------
 
-    ///<-------------- WiFi and Autotuning (Disabled) ----------
-    // NOTE: WiFi initialization can interfere with ADC operations
-    // To enable WiFi and autotuning:
-    // 1. Uncomment wifi_init() below
-    // 2. Uncomment autotuning_task creation
-    // 3. Ensure sufficient delay after ADC init (already added above)
     
-    
-    vTaskDelay(pdMS_TO_TICKS(2000)); ///< Wait for WiFi to stabilize
-    
-    ESP_LOGI(TAG, "Creating autotuning task...");
-    configASSERT(xTaskCreatePinnedToCore(autotuning_task, "autotuning", 8192, NULL, 7, NULL, 0));
-    ///<--------------------------------------------------------
 
+    // app_main can safely return - FreeRTOS tasks will continue running
+    ESP_LOGI(TAG, "Initialization complete, tasks running...");
 }

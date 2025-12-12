@@ -106,15 +106,63 @@ void vTaskEncoder(void * pvParameters) {
         estimate_velocity_encoder(encoder_data); ///< Estimate the velocity using encoder data
 
         // Log every 100ms because of the ESP_LOGI overhead
+        static int counter = 0;
+        if (++counter >= 100 / SAMPLE_TIME) {
+            ESP_LOGI(task_name, "Velocity: %.2f", encoder_data->velocity);
+            counter = 0;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(SAMPLE_TIME)); ///< Wait for 2 ms
+    }
+    ///<--------------------------------------------------
+}
+
+void vTaskEncoders(void *pvParameters)
+{
+    encoder_params_t *params = (encoder_params_t *)pvParameters; ///< Control parameters structure
+    encoder_data_t *encoder_data_right = (encoder_data_t *)params->right_sensor_data; ///< Encoder data structure for right wheel
+    encoder_data_t *encoder_data_left = (encoder_data_t *)params->left_sensor_data; ///< Encoder data structure for left wheel
+    encoder_data_t *encoder_data_back = (encoder_data_t *)params->back_sensor_data; ///< Encoder data structure for back wheel
+
+    // Get task name
+    const char *task_name = pcTaskGetName(xTaskGetCurrentTaskHandle());
+
+    vTaskDelay(pdMS_TO_TICKS(1500)); // Wait 1.5 seconds for ADC to stabilize
+    
+    // Verify ADC is calibrated before proceeding
+    if (!params->right_gStruct->adc_handle.is_calibrated ||
+        !params->left_gStruct->adc_handle.is_calibrated ||
+        !params->back_gStruct->adc_handle.is_calibrated) {
+        ESP_LOGE(task_name, "ERROR: ADC not calibrated! Task cannot proceed.");
+        vTaskDelete(NULL);
+        return;
+    }
+    
+    ESP_LOGI(task_name, "ADC ready, starting encoder readings");
+
+    while (1)
+    {
+        // Read encoder values and update the encoder data structures
+        // Mutex in adc_read_mvolt protects shared ADC unit access
+        encoder_data_right->angle = AS5600_ADC_GetAngle(params->right_gStruct);
+        encoder_data_left->angle = AS5600_ADC_GetAngle(params->left_gStruct);
+        encoder_data_back->angle = AS5600_ADC_GetAngle(params->back_gStruct);
+
+        estimate_velocity_encoder(encoder_data_right);
+        estimate_velocity_encoder(encoder_data_left);
+        estimate_velocity_encoder(encoder_data_back);
+
+        // Log every 100ms because of the ESP_LOGI overhead
         // static int counter = 0;
         // if (++counter >= 100 / SAMPLE_TIME) {
-        //     ESP_LOGI(task_name, "Velocity: %.2f", encoder_data->velocity);
+        //     ESP_LOGI(task_name, "Right velocity: %.2f", encoder_data_right->velocity);
+        //     ESP_LOGI(task_name, "Left velocity: %.2f", encoder_data_left->velocity);
+        //     ESP_LOGI(task_name, "Back velocity: %.2f", encoder_data_back->velocity);
         //     counter = 0;
         // }
 
-        vTaskDelay(SAMPLE_TIME / portTICK_PERIOD_MS); ///< Wait for 2 ms
+        vTaskDelay(SAMPLE_TIME / portTICK_PERIOD_MS);
     }
-    ///<--------------------------------------------------
 }
 
 // Task to control the wheel
