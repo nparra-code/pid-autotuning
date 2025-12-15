@@ -37,8 +37,8 @@
 #define PWM_GPIO_L 47               ///< GPIO number for left PWM signal
 #define PWM_REV_GPIO_L 48           ///< GPIO number for left PWM reverse signal
 
-#define PWM_GPIO_B 45               ///< GPIO number for back PWM signal
-#define PWM_REV_GPIO_B 0           ///< GPIO number for back PWM reverse signal
+#define PWM_GPIO_B 35               ///< GPIO number for back PWM signal
+#define PWM_REV_GPIO_B 36           ///< GPIO number for back PWM reverse signal
 
 #define PWM_FREQ 50                 ///< PWM frequency in Hz
 #define PWM_RESOLUTION 100000       ///< PWM resolution in bits
@@ -84,10 +84,8 @@ typedef struct {
 } distance_params_t;
 
 /**
- * @brief Task to read from encoder
+ * @brief Task to read from encoders
  */
-void vTaskEncoder(void * pvParameters);
-
 void vTaskEncoders(void * pvParameters);
 
 /**
