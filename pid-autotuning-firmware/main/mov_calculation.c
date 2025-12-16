@@ -86,13 +86,13 @@ void multiple_movements(Movement *movements, uint8_t movement_count, float *x_ve
         g_time += SAMPLE_TIME / 1000.0f; // Increment global time by the sample time in seconds
     }
 
-    static int ctr = 0;
-    if (++ctr >= 200 / SAMPLE_TIME) { 
-        // ESP_LOGI(task_name, "Input: %.2f\tOutput: %.2f", est_velocity, output); ///< Log the PID parameters
-        // ESP_LOGI("MUL_MOVS", "Movement %d: Type: %d, Dir: %d, Lin Vel: %.2f, Angle: %.2f, Radius: %.2f, Duration: %.2f, Elapsed Time: %.2f", 
-        //             i, mov.movement_type, mov.direction, mov.linear_velocity, mov.angle, mov.radius, mov.duration, g_time); ///< Log the current movement
-        ctr = 0;
-    }
+    // static int ctr = 0;
+    // if (++ctr >= 200 / SAMPLE_TIME) { 
+    //     // ESP_LOGI(task_name, "Input: %.2f\tOutput: %.2f", est_velocity, output); ///< Log the PID parameters
+    //     // ESP_LOGI("MUL_MOVS", "Movement %d: Type: %d, Dir: %d, Lin Vel: %.2f, Angle: %.2f, Radius: %.2f, Duration: %.2f, Elapsed Time: %.2f", 
+    //     //             i, mov.movement_type, mov.direction, mov.linear_velocity, mov.angle, mov.radius, mov.duration, g_time); ///< Log the current movement
+    //     ctr = 0;
+    // }
 
     float temp_x = 0.0f;
     float temp_y = 0.0f;

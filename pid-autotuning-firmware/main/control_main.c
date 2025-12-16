@@ -38,9 +38,9 @@ encoder_data_t back_encoder_data = {
 }; ///< Encoder data structure
 
 pid_parameter_t pid_paramR = {
-    .kp = PID_KP,
-    .ki = PID_KI,
-    .kd = PID_KD,
+    .kp = PID_KP_R,
+    .ki = PID_KI_R,
+    .kd = PID_KD_R,
     .max_output = 80.0f,
     .min_output = -80.0f,
     .set_point = 0.0f,
@@ -49,9 +49,9 @@ pid_parameter_t pid_paramR = {
 };
 
 pid_parameter_t pid_paramL = {
-    .kp = PID_KP,
-    .ki = PID_KI,
-    .kd = PID_KD,
+    .kp = PID_KP_L,
+    .ki = PID_KI_L,
+    .kd = PID_KD_L,
     .max_output = 80.0f,
     .min_output = -80.0f,
     .set_point = 0.0f,
@@ -60,9 +60,9 @@ pid_parameter_t pid_paramL = {
 };
 
 pid_parameter_t pid_paramB = {
-    .kp = PID_KP,
-    .ki = PID_KI,
-    .kd = PID_KD,
+    .kp = PID_KP_B,
+    .ki = PID_KI_B,
+    .kd = PID_KD_B,
     .max_output = 80.0f,
     .min_output = -80.0f,
     .set_point = 0.0f,
@@ -140,9 +140,14 @@ void vTaskControl( void * pvParameters ){
 
     // Get task name
     const char *task_name = pcTaskGetName(xTask);
+    // Movement movements[] = {
+    //     {LINEAR, true, 15, 90, .0, 10.0f},
+    //     {CIRCULAR, true, 5, 360, 40.0f, (360.0 / 360.0) * 2 * PI * 40.0f / 5},
+    // };
     Movement movements[] = {
-        {LINEAR, true, 15, 90, .0, 10.0f},
-        {CIRCULAR, true, 5, 360, 40.0f, (360.0 / 360.0) * 2 * PI * 40.0f / 5},
+        {LINEAR, true, 12, 90, .0, 10.0f},
+        {LINEAR, true, 10, 0, .0, 5.0f},
+        {LINEAR, false, 20, 0, .0, 7.0f},
     };
 
     while (1)
@@ -154,7 +159,7 @@ void vTaskControl( void * pvParameters ){
 
         last_est_velocity = est_velocity; ///< Update the last estimated velocity
 
-        multiple_movements(movements, 2, &x_vel, &y_vel); ///< Get the generalized velocities for the robot
+        multiple_movements(movements, 3, &x_vel, &y_vel); ///< Get the generalized velocities for the robot
         cal_lin_to_ang_velocity(x_vel, y_vel, params->vel_selection, &setpoint); ///< Calculate the angular velocity for the wheel
 
         if (pid_update_set_point(pid_block, setpoint) != PID_OK) {
@@ -201,4 +206,30 @@ void vTaskDistance(void *pvParameters){
         vTaskDelay(5 * SAMPLE_TIME / portTICK_PERIOD_MS); ///< Wait for 2 ms
     }
 
+}
+
+// Task to input PWMs to the motor controller
+void vTaskIdent( void * pvParameters ){
+
+    control_params_t *params = (control_params_t *)pvParameters; ///< Control parameters structure
+
+    // Get task name
+    const char *task_name = pcTaskGetName(xTaskGetCurrentTaskHandle());
+    
+    int pwm[] = {0, 20, 40, 60, 80, 60, 40, 20, 0, -20, -40, -60, -80, -60, -40, -20, 0};
+
+    while (1)
+    {
+        static int pwm_index = 0; ///< Index to keep track of the PWM value
+
+        // Set the PWM duty cycle
+        bldc_set_duty(params->pwm_motor, pwm[pwm_index]);
+
+        // Update the PWM index
+        if (pwm_index < sizeof(pwm) / sizeof(pwm[0]) - 1) {
+            pwm_index++;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(1500)); ///< Wait for 1500 ms
+    }
 }

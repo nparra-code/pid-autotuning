@@ -7,7 +7,7 @@
 #include <stdbool.h>
 #include "esp_log.h"
 
-#define SAMPLE_TIME 2 ///< Sample time in ms
+#define SAMPLE_TIME 1 ///< Sample time in ms
 #define PI 3.14159265358979323846
 #define DELTA PI/6.0  ///< Angle in degrees for the transformation (orientation angle of the body)
 #define N     16      ///< Reduction factor for the transformation (planetary gear ratio)

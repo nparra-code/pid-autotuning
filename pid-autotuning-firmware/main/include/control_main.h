@@ -23,22 +23,22 @@
 #define WHEEL_RADIO 3.0f ///< Radio of the wheel in cm
 
 ///<-------------- AS5600 configuration --------------
-#define AS5600_OUT_GPIO_RIGHT 5         ///< gpio number for right OUT signal
-#define AS5600_OUT_GPIO_LEFT 6          ///< gpio number for left OUT signal
-#define AS5600_OUT_GPIO_BACK 7          ///< gpio number for back OUT signal
+#define AS5600_OUT_GPIO_RIGHT 1//5         ///< gpio number for right OUT signal
+#define AS5600_OUT_GPIO_LEFT  6//6          ///< gpio number for left OUT signal
+#define AS5600_OUT_GPIO_BACK  7//7          ///< gpio number for back OUT signal
 #define AS5600_ADC_UNIT_ID ADC_UNIT_1   ///< I2C port number for master dev
 #define AS5600_MODE 1                   ///< Calibration = 0, Angle through ADC = 1
 ///<--------------------------------------------------
 
 ///<-------------- BLDC configuration -----------------
-#define PWM_GPIO_R 20               ///< GPIO number for right PWM signal
-#define PWM_REV_GPIO_R 21           ///< GPIO number for right PWM reverse signal
+#define PWM_GPIO_R 46//20               ///< GPIO number for right PWM signal
+#define PWM_REV_GPIO_R 9//21           ///< GPIO number for right PWM reverse signal
 
-#define PWM_GPIO_L 47               ///< GPIO number for left PWM signal
-#define PWM_REV_GPIO_L 48           ///< GPIO number for left PWM reverse signal
+#define PWM_GPIO_L 17//47               ///< GPIO number for left PWM signal
+#define PWM_REV_GPIO_L 18//48           ///< GPIO number for left PWM reverse signal
 
-#define PWM_GPIO_B 35               ///< GPIO number for back PWM signal
-#define PWM_REV_GPIO_B 36           ///< GPIO number for back PWM reverse signal
+#define PWM_GPIO_B 8//35               ///< GPIO number for back PWM signal
+#define PWM_REV_GPIO_B 3//36           ///< GPIO number for back PWM reverse signal
 
 #define PWM_FREQ 50                 ///< PWM frequency in Hz
 #define PWM_RESOLUTION 100000       ///< PWM resolution in bits
@@ -49,9 +49,18 @@
 ///<--------------------------------------------------
 
 ///<-------------- PID configuration -----------------
-#define PID_KP .04//.01f
-#define PID_KI .02//.01f
-#define PID_KD 0.0//.001f
+#define PID_KP_R .01 //.01f Proportional gain for right motor
+#define PID_KI_R .025 //.01f Integral gain for right motor
+#define PID_KD_R 0.0 //.001f Derivative gain for right motor
+
+#define PID_KP_L .01 //.01f Proportional gain for left motor
+#define PID_KI_L .025 //.01f Integral gain for left motor
+#define PID_KD_L 0.0005 //.001f Derivative gain for left motor
+
+#define PID_KP_B .015 //.01f Proportional gain for back motor
+#define PID_KI_B .025 //.01f Integral gain for back motor
+#define PID_KD_B 0.0005 //.001f Derivative gain for back motor
+
 #define EULER 2.71828
 #define PI 3.14159
 ///<--------------------------------------------------
@@ -96,10 +105,17 @@ void vTaskEncoders(void * pvParameters);
 void vTaskControl( void * pvParameters );
 
 /**
- * @brief Task to keep track of distace
- * 
+ * @brief Task to keep track of distance
+ *
  * @param pvParameters
  */
 void vTaskDistance(void * pvParameters);
+
+/**
+ * @brief Task to input PWMs to the motor controller
+ * 
+ * @param pvParameters 
+ */
+void vTaskIdent( void * pvParameters );
 
 #endif // CONTROL_H
