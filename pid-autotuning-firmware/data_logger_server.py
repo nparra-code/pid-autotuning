@@ -49,6 +49,32 @@ CSV_HEADER = [
     "error_2_k", "error_2_k1", "error_2_k2"
 ]
 
+#define PID_KP_R 0.0 //.01f Proportional gain for right motor
+#define PID_KI_R 0.01 //.01f Integral gain for right motor
+#define PID_KD_R 0.0 //.001f Derivative gain for right motor
+
+#define PID_KP_L 0.0 //.01f Proportional gain for left motor
+#define PID_KI_L 0.01 //.01f Integral gain for left motor
+#define PID_KD_L 0.0 //.001f Derivative gain for left motor
+
+#define PID_KP_B 0.0 //.01f Proportional gain for back motor
+#define PID_KI_B 0.01 //.01f Integral gain for back motor
+#define PID_KD_B 0.0 //.001f Derivative gain for back motor
+
+PID_KP_R = 0.0
+PID_KI_R = 0.01
+PID_KD_R = 0.0
+PID_KP_L = 0.0
+PID_KI_L = 0.01
+PID_KD_L = 0.0
+PID_KP_B = 0.0
+PID_KI_B = 0.01
+PID_KD_B = 0.0
+
+Kps = [PID_KP_R, PID_KP_L, PID_KP_B]
+Kis = [PID_KI_R, PID_KI_L, PID_KI_B]
+Kds = [PID_KD_R, PID_KD_L, PID_KD_B]
+
 
 class DataLogger:
     """Handles logging of telemetry data to files"""
@@ -62,9 +88,9 @@ class DataLogger:
         os.makedirs(self.log_dir, exist_ok=True)
         
         # File paths
-        self.csv_path = os.path.join(self.log_dir, f"telemetry_{self.session_id}.csv")
-        self.raw_path = os.path.join(self.log_dir, f"telemetry_{self.session_id}_raw.bin")
-        self.meta_path = os.path.join(self.log_dir, f"telemetry_{self.session_id}_meta.json")
+        self.csv_path = os.path.join(self.log_dir, f"telemetry_{self.session_id}_{Kps}{Kis}{Kds}.csv")
+        self.raw_path = os.path.join(self.log_dir, f"telemetry_{self.session_id}_{Kps}{Kis}{Kds}_raw.bin")
+        self.meta_path = os.path.join(self.log_dir, f"telemetry_{self.session_id}_{Kps}{Kis}{Kds}_meta.json")
         
         # Statistics
         self.total_samples = 0
