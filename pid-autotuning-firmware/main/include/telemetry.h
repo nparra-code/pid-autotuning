@@ -36,7 +36,8 @@ typedef enum {
     MSG_TYPE_PID_RESPONSE = 0x02,
     MSG_TYPE_ACK = 0x03,
     MSG_TYPE_ERROR = 0x04,
-    MSG_TYPE_IDENT_DATA = 0x05
+    MSG_TYPE_IDENT_DATA = 0x05,
+    MSG_TYPE_INFERENCE_REQUEST = 0x06  // New: Request server to perform inference
 } telemetry_msg_type_t;
 
 // Robot sensor data structure (customize based on your sensors)
@@ -102,6 +103,7 @@ esp_err_t telemetry_add_sample(const robot_sample_t *sample);
 esp_err_t telemetry_ident_add_sample(const motor_ident_sample_t *sample);
 esp_err_t telemetry_send_batch(void);
 esp_err_t telemetry_ident_send_batch(void);
+esp_err_t telemetry_request_inference(void);  // New: Request PID inference from accumulated data
 esp_err_t telemetry_receive_pid(pid_response_t *pid_data, uint32_t timeout_ms);
 telemetry_status_t telemetry_get_status(void);
 void telemetry_get_stats(uint32_t *samples_sent, uint32_t *responses_recv, uint32_t *errors);

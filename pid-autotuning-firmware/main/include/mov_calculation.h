@@ -65,7 +65,13 @@ void cal_lin_to_ang_velocity(float x_velocity, float y_velocity, uint8_t vel_sel
  * @param movement_count Number of movements in the array.
  * @param x_velocity Pointer to store the resulting x component of the velocity.
  * @param y_velocity Pointer to store the resulting y component of the velocity.
+ * @return true if all movements are complete, false otherwise.
  */
-void multiple_movements(Movement * movements, uint8_t movement_count, float *x_velocity, float *y_velocity);
+bool multiple_movements(Movement * movements, uint8_t movement_count, float *x_velocity, float *y_velocity);
+
+/**
+ * @brief Reset the movement sequence to start from the beginning.
+ */
+void reset_movements(void);
 
 #endif // MOV_CALCULATION_H

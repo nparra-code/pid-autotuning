@@ -375,6 +375,46 @@ esp_err_t telemetry_ident_send_batch(void)
     return ESP_OK;
 }
 
+// Request PID inference from accumulated data on server
+esp_err_t telemetry_request_inference(void) {
+    xSemaphoreTake(g_telem.mutex, portMAX_DELAY);
+    
+    if (g_telem.socket_fd < 0) {
+        ESP_LOGE(TAG, "Not connected");
+        g_telem.errors++;
+        xSemaphoreGive(g_telem.mutex);
+        return ESP_FAIL;
+    }
+    
+    // Prepare header for inference request (no payload)
+    msg_header_t header = {
+        .type = MSG_TYPE_INFERENCE_REQUEST,
+        .version = PROTOCOL_VERSION,
+        .length = 0,
+        .checksum = 0
+    };
+    
+    ESP_LOGI(TAG, "Sending inference request to server...");
+    
+    g_telem.status = TELEMETRY_SENDING;
+    
+    // Send header
+    int sent = send(g_telem.socket_fd, &header, sizeof(header), 0);
+    if (sent != sizeof(header)) {
+        ESP_LOGE(TAG, "Failed to send inference request header: %d", errno);
+        g_telem.status = TELEMETRY_ERROR;
+        g_telem.errors++;
+        xSemaphoreGive(g_telem.mutex);
+        return ESP_FAIL;
+    }
+    
+    g_telem.status = TELEMETRY_WAITING_RESPONSE;
+    ESP_LOGI(TAG, "Inference request sent successfully");
+    
+    xSemaphoreGive(g_telem.mutex);
+    return ESP_OK;
+}
+
 // Receive PID constants from server
 esp_err_t telemetry_receive_pid(pid_response_t *pid_data, uint32_t timeout_ms) {
     if (pid_data == NULL) {

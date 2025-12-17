@@ -1,5 +1,10 @@
 #include "control_main.h"
 
+// Global flag to track if all control tasks have completed their movements
+volatile bool g_all_movements_complete = false;
+volatile int g_movements_complete_count = 0;
+#define TOTAL_CONTROL_TASKS 1
+
 bool forward_mov[] = {true, true, true, false, false, false, false, true}; ///< Forward movements for the robot
 float linear_velocity[] = {15.0f, 0.0f, 15.0f, 0.0f, 15.0f, 0.0f, 15.0f, 0.0f}; ///< Linear velocities for the robot in cm/s
 float angle[] = {0.0f, 0.0f, 90.0f, 0.0f, 0.0f, 0.0f, 90.0f, 0.0f}; ///< Angles for the robot in degrees
@@ -140,6 +145,10 @@ void vTaskControl( void * pvParameters ){
 
     // Get task name
     const char *task_name = pcTaskGetName(xTask);
+    
+    // Track if this task has completed movements
+    static bool this_task_complete = false;
+    
     // Movement movements[] = {
     //     {LINEAR, true, 15, 90, .0, 10.0f},
     //     {CIRCULAR, true, 5, 360, 40.0f, (360.0 / 360.0) * 2 * PI * 40.0f / 5},
@@ -160,7 +169,20 @@ void vTaskControl( void * pvParameters ){
 
         last_est_velocity = est_velocity; ///< Update the last estimated velocity
 
-        multiple_movements(movements, sizeof(movements) / sizeof(movements[0]), &x_vel, &y_vel); ///< Get the generalized velocities for the robot
+        bool movements_done = multiple_movements(movements, sizeof(movements) / sizeof(movements[0]), &x_vel, &y_vel); ///< Get the generalized velocities for the robot
+        
+        // Track completion (only count once per task)
+        if (movements_done && !this_task_complete) {
+            this_task_complete = true;
+            ESP_LOGI(task_name, "Movements complete!");
+            g_all_movements_complete = true;
+        }
+        
+        // Reset completion flag when movements are reset
+        if (!movements_done && this_task_complete) {
+            this_task_complete = false;
+        }
+        
         cal_lin_to_ang_velocity(x_vel, y_vel, params->vel_selection, &setpoint); ///< Calculate the angular velocity for the wheel
 
         if (pid_update_set_point(pid_block, setpoint) != PID_OK) {

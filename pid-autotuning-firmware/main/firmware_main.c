@@ -259,6 +259,11 @@ static void autotuning_task(void *pvParameters) {
     robot_sample_t sample;
     esp_err_t ret;
     
+    // External variables from control_main.c
+    extern volatile bool g_all_movements_complete;
+    extern volatile int g_movements_complete_count;
+    extern bool g_reset_movements_flag;
+    
     ESP_LOGI(TAG, "Starting autotuning task");
     
     // Wait for WiFi connection event
@@ -288,42 +293,73 @@ static void autotuning_task(void *pvParameters) {
     ESP_LOGI(TAG, "Starting autotuning loop");
     
     while (!current_pid.converged) {
-        // Phase 1: Collect data
-        ESP_LOGI(TAG, "Collecting %d samples...", TELEMETRY_SAMPLE_WINDOW);
+        // Reset movement completion flag at the start of each iteration
+        g_all_movements_complete = false;
+        g_movements_complete_count = 0;
         
-        for (int i = 0; i < TELEMETRY_SAMPLE_WINDOW; i++) {
-            read_robot_sensors(&sample);
-            
-            ret = telemetry_add_sample(&sample);
-            if (ret != ESP_OK) {
-                ESP_LOGE(TAG, "Failed to add sample");
-                break;
+        ESP_LOGI(TAG, "=== Starting new PID tuning iteration %d ===", current_pid.iteration + 1);
+        
+        // Phase 1: Continuously collect and send data while movements are executing
+        ESP_LOGI(TAG, "Collecting data while robot executes movements...");
+        
+        while (!g_all_movements_complete) {
+            // Collect a batch of samples
+            for (int i = 0; i < TELEMETRY_SAMPLE_WINDOW; i++) {
+                read_robot_sensors(&sample);
+                
+                ret = telemetry_add_sample(&sample);
+                if (ret != ESP_OK) {
+                    ESP_LOGE(TAG, "Failed to add sample");
+                    break;
+                }
+                
+                // Sample at 1000Hz (1ms interval)
+                vTaskDelay(pdMS_TO_TICKS(1));
             }
             
-            // Sample at 100Hz (10ms interval)
-            vTaskDelay(pdMS_TO_TICKS(1));
+            // Send batch to server (server accumulates data)
+            ret = telemetry_send_batch();
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to send batch");
+                vTaskDelay(pdMS_TO_TICKS(100));
+                continue;
+            }
+            
+            ESP_LOGI(TAG, "Batch sent (movements complete: %d/%d)", 
+                     g_movements_complete_count, 3);
         }
         
-        // Phase 2: Send batch to server
-        ESP_LOGI(TAG, "Sending data batch to server...");
-        ret = telemetry_send_batch();
+        ESP_LOGI(TAG, "All movements completed! Requesting PID inference...");
+        
+        // Phase 2: Request inference from accumulated data
+        ret = telemetry_request_inference();
         if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to send batch");
+            ESP_LOGE(TAG, "Failed to request inference");
             vTaskDelay(pdMS_TO_TICKS(1000));
             continue;
         }
         
         // Phase 3: Wait for PID response
         ESP_LOGI(TAG, "Waiting for PID response...");
-        ret = telemetry_receive_pid(&current_pid, 10000);  // 10 second timeout
+        ret = telemetry_receive_pid(&current_pid, 30000);  // 30 second timeout for inference
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "Failed to receive PID response");
-            // vTaskDelay(pdMS_TO_TICKS(1000));
             continue;
         }
+
+        ESP_LOGI(TAG, "Received PID response: Kp=[%.3f, %.3f, %.3f], Ki=[%.3f, %.3f, %.3f], Kd=[%.3f, %.3f, %.3f], Converged=%d",
+                 current_pid.kp[0], current_pid.kp[1], current_pid.kp[2],
+                 current_pid.ki[0], current_pid.ki[1], current_pid.ki[2],
+                 current_pid.kd[0], current_pid.kd[1], current_pid.kd[2],
+                 current_pid.converged);
         
         // Phase 4: Apply new PID constants
-        apply_pid_constants(&current_pid);
+        // apply_pid_constants(&current_pid);
+        
+        // Phase 5: Reset movements to repeat with new PID constants
+        ESP_LOGI(TAG, "Resetting movements for next iteration...");
+        g_reset_movements_flag = true;
+        vTaskDelay(pdMS_TO_TICKS(500));  // Give time for control tasks to reset
         
         // Print statistics
         uint32_t samples_sent, responses_recv, errors;

@@ -1,5 +1,8 @@
 #include "mov_calculation.h"
 
+// Global flag for resetting movement sequence
+bool g_reset_movements_flag = false;
+
 void linear_movement(bool forward, float linear_velocity, float angle, float *x_velocity, float *y_velocity) {
     if (forward) {
         *x_velocity = -linear_velocity * sinf(angle * PI / 180.0f);
@@ -58,13 +61,33 @@ void cal_lin_to_ang_velocity(float x_velocity, float y_velocity, uint8_t vel_sel
     }
 }
 
-void multiple_movements(Movement *movements, uint8_t movement_count, float *x_velocity, float *y_velocity)
+void reset_movements(void) {
+    // External reset flag that will be checked by multiple_movements
+    extern bool g_reset_movements_flag;
+    g_reset_movements_flag = true;
+}
+
+bool multiple_movements(Movement *movements, uint8_t movement_count, float *x_velocity, float *y_velocity)
 {
     static float g_time = 0.0f;
     static uint8_t i = 0;
     static Movement mov;  // Make mov static
     static bool initialized = false;  // Flag to initialize mov once
     static bool indefinite = false, stop = false;
+    static bool movements_complete = false;
+    
+    // Check for external reset request
+    extern bool g_reset_movements_flag;
+    if (g_reset_movements_flag) {
+        g_time = 0.0f;
+        i = 0;
+        initialized = false;
+        indefinite = false;
+        stop = false;
+        movements_complete = false;
+        g_reset_movements_flag = false;
+        ESP_LOGI("MUL_MOVS", "Movement sequence reset");
+    }
     
     // Initialize mov on first call
     if (!initialized) {
@@ -78,6 +101,7 @@ void multiple_movements(Movement *movements, uint8_t movement_count, float *x_ve
             i = 0;
             stop = true;
             indefinite = true; // All movements completed, enter indefinite mode
+            movements_complete = true;
             // ESP_LOGW("MUL_MOVS", "All movements completed. Stop!");
         }
         // ESP_LOGI("MUL_MOVS", "Completed movement %d", i);
@@ -117,5 +141,5 @@ void multiple_movements(Movement *movements, uint8_t movement_count, float *x_ve
 
     *x_velocity = temp_x;
     *y_velocity = temp_y;
-    return;
+    return movements_complete;
 }

@@ -23,36 +23,36 @@
 #define WHEEL_RADIO 3.0f ///< Radio of the wheel in cm
 
 ///<-------------- AS5600 configuration --------------
-// #define AS5600_OUT_GPIO_RIGHT 5 ///< gpio number for right OUT signal
-// #define AS5600_OUT_GPIO_LEFT  6 ///< gpio number for left OUT signal
-// #define AS5600_OUT_GPIO_BACK  7 ///< gpio number for back OUT signal
-
-#define AS5600_OUT_GPIO_RIGHT 1 ///< gpio number for right OUT signal
+#define AS5600_OUT_GPIO_RIGHT 5 ///< gpio number for right OUT signal
 #define AS5600_OUT_GPIO_LEFT  6 ///< gpio number for left OUT signal
 #define AS5600_OUT_GPIO_BACK  7 ///< gpio number for back OUT signal
+
+// #define AS5600_OUT_GPIO_RIGHT 1 ///< gpio number for right OUT signal
+// #define AS5600_OUT_GPIO_LEFT  6 ///< gpio number for left OUT signal
+// #define AS5600_OUT_GPIO_BACK  7 ///< gpio number for back OUT signal
 
 #define AS5600_ADC_UNIT_ID ADC_UNIT_1   ///< I2C port number for master dev
 #define AS5600_MODE 1                   ///< Calibration = 0, Angle through ADC = 1
 ///<--------------------------------------------------
 
 ///<-------------- BLDC configuration -----------------
-// #define PWM_GPIO_R 20               ///< GPIO number for right PWM signal
-// #define PWM_REV_GPIO_R 21           ///< GPIO number for right PWM reverse signal
+#define PWM_GPIO_R 20               ///< GPIO number for right PWM signal
+#define PWM_REV_GPIO_R 21           ///< GPIO number for right PWM reverse signal
 
-// #define PWM_GPIO_L 47               ///< GPIO number for left PWM signal
-// #define PWM_REV_GPIO_L 48           ///< GPIO number for left PWM reverse signal
+#define PWM_GPIO_L 47               ///< GPIO number for left PWM signal
+#define PWM_REV_GPIO_L 48           ///< GPIO number for left PWM reverse signal
 
-// #define PWM_GPIO_B 35               ///< GPIO number for back PWM signal
-// #define PWM_REV_GPIO_B 36           ///< GPIO number for back PWM reverse signal
+#define PWM_GPIO_B 35               ///< GPIO number for back PWM signal
+#define PWM_REV_GPIO_B 36           ///< GPIO number for back PWM reverse signal
 
-#define PWM_GPIO_R 46               ///< GPIO number for right PWM signal
-#define PWM_REV_GPIO_R 9           ///< GPIO number for right PWM reverse signal
+// #define PWM_GPIO_R 46               ///< GPIO number for right PWM signal
+// #define PWM_REV_GPIO_R 9           ///< GPIO number for right PWM reverse signal
 
-#define PWM_GPIO_L 17               ///< GPIO number for left PWM signal
-#define PWM_REV_GPIO_L 18           ///< GPIO number for left PWM reverse signal
+// #define PWM_GPIO_L 17               ///< GPIO number for left PWM signal
+// #define PWM_REV_GPIO_L 18           ///< GPIO number for left PWM reverse signal
 
-#define PWM_GPIO_B 8               ///< GPIO number for back PWM signal
-#define PWM_REV_GPIO_B 3           ///< GPIO number for back PWM reverse signal
+// #define PWM_GPIO_B 8               ///< GPIO number for back PWM signal
+// #define PWM_REV_GPIO_B 3           ///< GPIO number for back PWM reverse signal
 
 #define PWM_FREQ 50                 ///< PWM frequency in Hz
 #define PWM_RESOLUTION 100000       ///< PWM resolution in bits
@@ -117,7 +117,6 @@ void vTaskEncoders(void * pvParameters);
  * @param pvParameters 
  */
 void vTaskControl( void * pvParameters );
-
 /**
  * @brief Task to keep track of distance
  *
@@ -131,5 +130,10 @@ void vTaskDistance(void * pvParameters);
  * @param pvParameters 
  */
 void vTaskIdent( void * pvParameters );
+
+// Global variables for movement completion tracking
+extern volatile bool g_all_movements_complete;
+extern volatile int g_movements_complete_count;
+extern bool g_reset_movements_flag;
 
 #endif // CONTROL_H
