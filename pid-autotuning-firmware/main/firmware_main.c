@@ -30,6 +30,8 @@
 
 static const char *TAG = "MAIN";
 
+#define MODE 1  ///< 0: Identification mode, 1: PID autotuning mode
+
 // WiFi event group bits
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
@@ -204,6 +206,22 @@ static void read_robot_sensors(robot_sample_t *sample) {
     sample->errors[2][0] = pidB->set_point - back_encoder_data.state;  // Current motor 3 error (k)
 }
 
+// Read actual sensor data from robot encoders
+static void read_ident_robot_sensors(motor_ident_sample_t *sample, control_params_t *params) {
+
+    encoder_data_t * e_data = params->sensor_data;
+    pid_block_handle_t pid_block = *(params->pid_block);
+
+    // Read timestamp
+    sample->timestamp_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
+
+    // Motor current (placeholder - add actual current sensing if available)
+    sample->velocity_response = e_data->state;
+
+    // Motor setpoints from PID parameters
+    sample->pwm_input = pid_block->set_point;
+}
+
 // Apply PID constants to motor controllers
 static void apply_pid_constants(const pid_response_t *pid_response) {
     ESP_LOGI(TAG, "Applying PID constants:");
@@ -319,6 +337,85 @@ static void autotuning_task(void *pvParameters) {
     // Disconnect
     telemetry_disconnect();
     
+    vTaskDelete(NULL);
+}
+
+static void identification_task(void *pvParameters) {
+    motor_ident_sample_t sample;
+    esp_err_t ret;
+    
+    ESP_LOGI(TAG, "Starting identification task");
+    
+    // Wait for WiFi connection event
+    ESP_LOGI(TAG, "Waiting for WiFi connection...");
+    
+    ESP_LOGI(TAG, "WiFi connected, initializing telemetry...");
+    
+    // Initialize telemetry
+    ret = telemetry_init(SERVER_IP);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize telemetry");
+        vTaskDelete(NULL);
+        return;
+    }
+    
+    // Give some time for network stack to stabilize
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    
+    // Connect to server
+    ret = telemetry_ident_connect();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to connect to server");
+        vTaskDelete(NULL);
+        return;
+    }
+    
+    ESP_LOGI(TAG, "Starting identification loop");
+
+    control_params_t *params = (control_params_t *) pvParameters;
+
+    int cnt = 0;
+    while (cnt < 1500*12) {
+        // Phase 1: Collect data
+        ESP_LOGI(TAG, "Collecting %d samples...", TELEMETRY_SAMPLE_WINDOW);
+        
+        for (int i = 0; i < TELEMETRY_SAMPLE_WINDOW; i++) {
+            read_ident_robot_sensors(&sample, params);
+
+            ret = telemetry_ident_add_sample(&sample);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to add sample");
+                break;
+            }
+            
+            // Sample at 100Hz (10ms interval)
+            vTaskDelay(pdMS_TO_TICKS(1));
+        }
+        ESP_LOGI(TAG, "State: %.2f\tSetpoint: %.2f", params->sensor_data->state, (*(params->pid_block))->set_point); ///< Log the PID parameters
+        
+        // Phase 2: Send batch to server
+        ESP_LOGI(TAG, "Sending identification data batch to server...");
+        ret = telemetry_ident_send_batch();
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to send batch");
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;
+        }
+        
+        // Print statistics
+        uint32_t samples_sent, responses_recv, errors;
+        telemetry_get_stats(&samples_sent, &responses_recv, &errors);
+        ESP_LOGI(TAG, "Stats: samples=%lu, responses=%lu, errors=%lu",
+                 samples_sent, responses_recv, errors);
+        cnt += TELEMETRY_SAMPLE_WINDOW;
+    }
+
+    ESP_LOGI(TAG, "Identification complete!");
+
+    // Disconnect
+    telemetry_disconnect();
+    
+    // Delete this task when done
     vTaskDelete(NULL);
 }
 
@@ -449,15 +546,11 @@ void app_main(void)
 
     ///<--------------------------------------------------
 
-    TaskHandle_t xEncodersTaskHandle; ///< Task handles for encoders
-    
-    TaskHandle_t xRightControlTaskHandle, xLeftControlTaskHandle, xBackControlTaskHandle, xDistanceTaskHandle; ///< Task handles for control tasks
-
-    ESP_LOGI(TAG, "=== PID Autotuner Robot ===");
-
     ///<-------------- Create the encoders tasks ---------------
 
-    xTaskCreatePinnedToCore(vTaskEncoders, "encoders_task", 12288, &encoder_params, 8, &xEncodersTaskHandle, 0); ///< Create the task to read from all encoders
+    TaskHandle_t xEncodersTaskHandle; ///< Task handles for encoders
+
+    xTaskCreatePinnedToCore(vTaskEncoders, "encoders_task", 12288, &encoder_params, 8, &xEncodersTaskHandle, 1); ///< Create the task to read from all encoders
 
     configASSERT(xEncodersTaskHandle); ///< Check if the task was created successfully
     if (xEncodersTaskHandle == NULL) {
@@ -466,6 +559,12 @@ void app_main(void)
     }
 
     ///<--------------------------------------------------------
+
+    #if MODE == 1
+    
+    TaskHandle_t xRightControlTaskHandle, xLeftControlTaskHandle, xBackControlTaskHandle, xDistanceTaskHandle; ///< Task handles for control tasks
+
+    ESP_LOGI(TAG, "=== PID Autotuner Robot ===");
 
     ///<-------------- WiFi and Autotuning ---------------------
     ESP_LOGI(TAG, "Creating autotuning task...");
@@ -496,6 +595,21 @@ void app_main(void)
     }
 
     ///<--------------------------------------------------------
+    #elif MODE == 0
+
+    ///<-------------- WiFi and Identification ---------------------
+    ESP_LOGI(TAG, "Creating identification task...");
+    configASSERT(xTaskCreatePinnedToCore(identification_task, "identification", 8192, &right_control_params, 7, NULL, 0));
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
+    configASSERT(xTaskCreatePinnedToCore(vTaskIdent, "rwh_ident_task", 4096, &right_control_params, 9, NULL, 1)); ///< Create the task to identify the right wheel
+    // configASSERT(xTaskCreatePinnedToCore(vTaskIdent, "lwh_ident_task", 4096, &left_control_params, 9, NULL, 1));   ///< Create the task to identify the left wheel
+    // configASSERT(xTaskCreatePinnedToCore(vTaskIdent, "bwh_ident_task", 4096, &back_control_params, 9, NULL, 1));   ///< Create the task to identify the back wheel
+    ///<--------------------------------------------------------
+
+    
+
+    #endif
 
     // app_main can safely return - FreeRTOS tasks will continue running
     ESP_LOGI(TAG, "Initialization complete, tasks running...");

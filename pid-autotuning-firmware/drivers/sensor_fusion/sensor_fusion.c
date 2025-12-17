@@ -72,7 +72,7 @@ void estimate_velocity_encoder(encoder_data_t * encoder_data){
 
         if(fabsf(dist) > 0.25) encoder_data->distance += fabsf(dist); ///< Store the distance
         
-        float vel =  (dist / encoder_data->radio) / encoder_data->time_interval, beta = 0.96f; ///< Calculate the velocity in cm/s
+        float vel =  (dist / encoder_data->radio) / encoder_data->time_interval, beta = 0.98f; ///< Calculate the velocity in cm/s
 
         encoder_data->state = beta * encoder_data->last_st + (1 - beta) * (angle - encoder_data->angle_prev) / encoder_data->time_interval; ///< Update the state variable (angular velocity)
         

@@ -148,6 +148,7 @@ void vTaskControl( void * pvParameters ){
         {LINEAR, true, 12, 90, .0, 10.0f},
         {LINEAR, true, 10, 0, .0, 5.0f},
         {LINEAR, false, 20, 0, .0, 7.0f},
+        {CIRCULAR, true, 5, 360, 20.0f, (360.0 / 360.0) * 2 * PI * 20.0f / 5}
     };
 
     while (1)
@@ -159,7 +160,7 @@ void vTaskControl( void * pvParameters ){
 
         last_est_velocity = est_velocity; ///< Update the last estimated velocity
 
-        multiple_movements(movements, 3, &x_vel, &y_vel); ///< Get the generalized velocities for the robot
+        multiple_movements(movements, sizeof(movements) / sizeof(movements[0]), &x_vel, &y_vel); ///< Get the generalized velocities for the robot
         cal_lin_to_ang_velocity(x_vel, y_vel, params->vel_selection, &setpoint); ///< Calculate the angular velocity for the wheel
 
         if (pid_update_set_point(pid_block, setpoint) != PID_OK) {
@@ -212,24 +213,29 @@ void vTaskDistance(void *pvParameters){
 void vTaskIdent( void * pvParameters ){
 
     control_params_t *params = (control_params_t *)pvParameters; ///< Control parameters structure
+    pid_block_handle_t pid_block = *(params->pid_block); ///< PID control block handle
 
     // Get task name
     const char *task_name = pcTaskGetName(xTaskGetCurrentTaskHandle());
     
-    int pwm[] = {0, 20, 40, 60, 80, 60, 40, 20, 0, -20, -40, -60, -80, -60, -40, -20, 0};
+    int pwm[] = {0, 20, 40, 60,/* 80, 60,*/ 40, 20, 0, -20, -40, -60,/* -80, -60,*/ -40, -20, 0};
 
     while (1)
     {
         static int pwm_index = 0; ///< Index to keep track of the PWM value
 
         // Set the PWM duty cycle
+        if (pid_update_set_point(pid_block, pwm[pwm_index]) != PID_OK) {
+            ESP_LOGE(task_name, "Failed to update PID parameters for %s", task_name);
+        }
         bldc_set_duty(params->pwm_motor, pwm[pwm_index]);
 
         // Update the PWM index
-        if (pwm_index < sizeof(pwm) / sizeof(pwm[0]) - 1) {
+        if (pwm_index < 12) {
             pwm_index++;
         }
 
         vTaskDelay(pdMS_TO_TICKS(1500)); ///< Wait for 1500 ms
+        ESP_LOGI(task_name, "\tState: %.2f\tSetpoint: %.2f", params->sensor_data->state, pid_block->set_point); ///< Log the PID parameters
     }
 }
