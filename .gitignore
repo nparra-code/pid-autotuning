@@ -64,3 +64,4 @@ ___pycache__/
 *.pyc
 telemetry_logs/
 motor_ident_logs/
+env/
