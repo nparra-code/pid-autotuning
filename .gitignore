@@ -63,3 +63,4 @@ sdkconfig.old
 ___pycache__/
 *.pyc
 telemetry_logs/
+motor_ident_logs/
