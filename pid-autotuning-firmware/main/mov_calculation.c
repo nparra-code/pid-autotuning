@@ -32,6 +32,7 @@ void circular_movement(bool cw, float linear_velocity, float angle, float radius
 
         *x_velocity = 0.0f; ///< Stop the movement
         *y_velocity = 0.0f; ///< Stop the movement
+        t = 0.0f; ///< Reset time for the next circular movement
         
     }
 }

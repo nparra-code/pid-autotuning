@@ -17,6 +17,7 @@ extern "C" {
 typedef enum {
     PID_CAL_TYPE_INCREMENTAL, /*!< Incremental PID control */
     PID_CAL_TYPE_POSITIONAL,  /*!< Positional PID control */
+    PID_CAL_TYPE_DISCRETE,    /*!< Discrete PID control */
 } pid_calculate_type_t;
 
 /**
@@ -62,6 +63,7 @@ struct pid_block_t {
     float derivative_err; // Derivative of error
     float previous_derivative_err; // Derivative of error in last control period
     float previous_output;  // PID output in last control period u(n-1)
+    float prev_previous_output; // PID output in last last control period u(n-2)
     float max_output;   // PID maximum output limitation
     float min_output;   // PID minimum output limitation
     float set_point;    // PID set point (k)
@@ -69,6 +71,7 @@ struct pid_block_t {
     float last_last_set_point;     // Last last set point (k-2)
     float output;       // PID output
     float beta;         // PID beta filter coefficient of derivative term
+    float sample_time;  // PID sample time in seconds
     pid_cal_func_t calculate_func; // calculation function, depends on actual PID type set by user
 };
 

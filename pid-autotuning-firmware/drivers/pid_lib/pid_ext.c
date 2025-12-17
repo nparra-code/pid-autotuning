@@ -68,6 +68,43 @@ static void pid_calc_incremental(pid_block_t *pid)
     pid->output = output;
 }
 
+static void pid_calc_discrete(pid_block_t *pid)
+{
+    float b0, b1, b2, a0, a1, a2, output = 0;
+
+    b0 = (pid->Kp * (1 + pid->beta*pid->sample_time)) +
+         ( pid->Ki * pid->sample_time * (1 + pid->beta*pid->sample_time)) +
+         ( pid->Kd * pid->beta );
+    b1 = (-pid->Kp * (2 + pid->beta*pid->sample_time)) +
+         ( pid->Ki * pid->sample_time ) +
+         ( pid->Kd * (2 * pid->beta) );
+    b2 = pid->Kp +
+         ( pid->Kd * pid->beta );
+    a0 = 1 + pid->beta*pid->sample_time;
+    a1 = -(2 + pid->beta*pid->sample_time);
+    a2 = 1;
+
+    output = (b0/a0)*pid->error +
+             (b1/a0)*pid->previous_err1 +
+             (b2/a0)*pid->previous_err2 -
+             (a1/a0)*pid->previous_output -
+             (a2/a0)*pid->prev_previous_output;
+
+    /* If the output is beyond the range, it will be limited */
+    output = MIN(output, pid->max_output);
+    output = MAX(output, pid->min_output);
+
+    /* Update previous error */
+    pid->previous_err2 = pid->previous_err1;
+    pid->previous_err1 = pid->error;
+
+    /* Update last output */
+    pid->prev_previous_output = pid->previous_output;
+    pid->previous_output = output;
+
+    pid->output = output;
+}
+
 int pid_new_control_block(const pid_config_t *config, pid_block_handle_t *ret_pid)
 {
     int ret = PID_OK;
@@ -143,6 +180,9 @@ int pid_update_parameters(pid_block_handle_t pid, const pid_parameter_t *params)
         break;
     case PID_CAL_TYPE_POSITIONAL:
         pid->calculate_func = pid_calc_positional;
+        break;
+    case PID_CAL_TYPE_DISCRETE:
+        pid->calculate_func = pid_calc_discrete;
         break;
     default:
         return PID_ERR_INVALID_ARG; // Invalid PID calculation type

@@ -230,6 +230,7 @@ static void apply_pid_constants(const pid_response_t *pid_response) {
     pid_paramR.kp = pid_response->kp[0];
     pid_paramR.ki = pid_response->ki[0];
     pid_paramR.kd = pid_response->kd[0];
+    pid_update_parameters(pidR, &pid_paramR);
     ESP_LOGI(TAG, "  Right Motor: Kp=%.3f, Ki=%.3f, Kd=%.3f",
              pid_paramR.kp, pid_paramR.ki, pid_paramR.kd);
     
@@ -237,6 +238,7 @@ static void apply_pid_constants(const pid_response_t *pid_response) {
     pid_paramL.kp = pid_response->kp[1];
     pid_paramL.ki = pid_response->ki[1];
     pid_paramL.kd = pid_response->kd[1];
+    pid_update_parameters(pidL, &pid_paramL);
     ESP_LOGI(TAG, "  Left Motor: Kp=%.3f, Ki=%.3f, Kd=%.3f",
              pid_paramL.kp, pid_paramL.ki, pid_paramL.kd);
     
@@ -244,6 +246,7 @@ static void apply_pid_constants(const pid_response_t *pid_response) {
     pid_paramB.kp = pid_response->kp[2];
     pid_paramB.ki = pid_response->ki[2];
     pid_paramB.kd = pid_response->kd[2];
+    pid_update_parameters(pidB, &pid_paramB);
     ESP_LOGI(TAG, "  Back Motor: Kp=%.3f, Ki=%.3f, Kd=%.3f",
              pid_paramB.kp, pid_paramB.ki, pid_paramB.kd);
     
@@ -346,20 +349,16 @@ static void autotuning_task(void *pvParameters) {
             ESP_LOGE(TAG, "Failed to receive PID response");
             continue;
         }
-
-        ESP_LOGI(TAG, "Received PID response: Kp=[%.3f, %.3f, %.3f], Ki=[%.3f, %.3f, %.3f], Kd=[%.3f, %.3f, %.3f], Converged=%d",
-                 current_pid.kp[0], current_pid.kp[1], current_pid.kp[2],
-                 current_pid.ki[0], current_pid.ki[1], current_pid.ki[2],
-                 current_pid.kd[0], current_pid.kd[1], current_pid.kd[2],
-                 current_pid.converged);
         
         // Phase 4: Apply new PID constants
-        // apply_pid_constants(&current_pid);
+        apply_pid_constants(&current_pid);
         
         // Phase 5: Reset movements to repeat with new PID constants
-        ESP_LOGI(TAG, "Resetting movements for next iteration...");
-        g_reset_movements_flag = true;
-        vTaskDelay(pdMS_TO_TICKS(500));  // Give time for control tasks to reset
+        if (!current_pid.converged) {
+            ESP_LOGI(TAG, "Resetting movements for next iteration...");
+            g_reset_movements_flag = true;
+            vTaskDelay(pdMS_TO_TICKS(500));  // Give time for control tasks to reset
+        }
         
         // Print statistics
         uint32_t samples_sent, responses_recv, errors;
@@ -374,6 +373,85 @@ static void autotuning_task(void *pvParameters) {
     telemetry_disconnect();
     
     vTaskDelete(NULL);
+}
+
+// Main autotuning task
+
+static void logging_task(void *pvParameters) {
+
+    robot_sample_t sample;
+    esp_err_t ret;
+    extern volatile bool g_all_movements_complete;
+
+    ESP_LOGI(TAG, "Starting logging task");
+
+    // Wait for WiFi connection event
+    ESP_LOGI(TAG, "Waiting for WiFi connection...");
+    ESP_LOGI(TAG, "WiFi connected, initializing telemetry...");
+
+    // Initialize telemetry
+    ret = telemetry_init(SERVER_IP);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize telemetry");
+        vTaskDelete(NULL);
+        return;
+    }
+
+    // Give some time for network stack to stabilize
+    vTaskDelay(pdMS_TO_TICKS(2000));
+
+    // Connect to server
+    ret = telemetry_connect();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to connect to server");
+        vTaskDelete(NULL);
+        return;
+    }
+
+    ESP_LOGI(TAG, "Starting logging loop");
+
+    g_all_movements_complete = false;
+    while (!g_all_movements_complete) {
+        // Phase 1: Collect data
+        ESP_LOGI(TAG, "Collecting %d samples...", TELEMETRY_SAMPLE_WINDOW);
+
+        for (int i = 0; i < TELEMETRY_SAMPLE_WINDOW; i++) {
+            read_robot_sensors(&sample);
+
+            ret = telemetry_add_sample(&sample);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to add sample");
+                break;
+            }
+
+            // Sample at 1kHz (1ms interval)
+            vTaskDelay(pdMS_TO_TICKS(1));
+        }
+
+        // Phase 2: Send batch to server
+        // ESP_LOGI(TAG, "Sending data batch to server...");
+        ret = telemetry_send_batch();
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to send batch");
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;
+        }
+
+        // Print statistics
+        uint32_t samples_sent, responses_recv, errors;
+        telemetry_get_stats(&samples_sent, &responses_recv, &errors);
+        ESP_LOGI(TAG, "Stats: samples=%lu, responses=%lu, errors=%lu",
+                 samples_sent, responses_recv, errors);
+
+    }
+
+    ESP_LOGI(TAG, "Logging complete!");
+
+    // Disconnect
+    telemetry_disconnect();
+
+    vTaskDelete(NULL);
+
 }
 
 static void identification_task(void *pvParameters) {
@@ -604,7 +682,10 @@ void app_main(void)
 
     ///<-------------- WiFi and Autotuning ---------------------
     ESP_LOGI(TAG, "Creating autotuning task...");
-    configASSERT(xTaskCreatePinnedToCore(autotuning_task, "autotuning", 8192, NULL, 7, NULL, 0));
+
+    // configASSERT(xTaskCreatePinnedToCore(autotuning_task, "autotuning", 8192, NULL, 7, NULL, 0));
+    configASSERT(xTaskCreatePinnedToCore(logging_task, "logging", 16384, NULL, 7, NULL, 0));
+
     vTaskDelay(pdMS_TO_TICKS(1000));
     ///<--------------------------------------------------------
 

@@ -49,8 +49,8 @@ pid_parameter_t pid_paramR = {
     .max_output = 80.0f,
     .min_output = -80.0f,
     .set_point = 0.0f,
-    .cal_type = PID_CAL_TYPE_INCREMENTAL,
-    .beta = 0.0f
+    .cal_type = PID_CAL_TYPE_DISCRETE,
+    .beta = 0.8f
 };
 
 pid_parameter_t pid_paramL = {
@@ -60,7 +60,7 @@ pid_parameter_t pid_paramL = {
     .max_output = 80.0f,
     .min_output = -80.0f,
     .set_point = 0.0f,
-    .cal_type = PID_CAL_TYPE_INCREMENTAL,
+    .cal_type = PID_CAL_TYPE_DISCRETE,
     .beta = 0.0f
 };
 
@@ -71,7 +71,7 @@ pid_parameter_t pid_paramB = {
     .max_output = 80.0f,
     .min_output = -80.0f,
     .set_point = 0.0f,
-    .cal_type = PID_CAL_TYPE_INCREMENTAL,
+    .cal_type = PID_CAL_TYPE_DISCRETE,
     .beta = 0.0f
 };
 
@@ -159,6 +159,12 @@ void vTaskControl( void * pvParameters ){
         {LINEAR, false, 20, 0, .0, 7.0f},
         {CIRCULAR, true, 5, 360, 20.0f, (360.0 / 360.0) * 2 * PI * 20.0f / 5}
     };
+    // Movement movements[] = {
+    //     {LINEAR, true, 20, 90, .0, 10.0f},
+    //     {LINEAR, false, 12, 0, .0, 5.0f},
+    //     {LINEAR, true, 38, 0, .0, 7.0f},
+    //     {LINEAR, false, 30, 0, .0, 7.0f}
+    // };
 
     while (1)
     {
