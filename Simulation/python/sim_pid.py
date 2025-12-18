@@ -43,9 +43,10 @@ X0 = [0, 0, 0, 0, 0, 0]
 
 # PID parameters for each wheel
 # [21.1, 20.4, 21.1]  [18.1, 15.9, 18.1]  [0.03, 0.02, 0.03]
-Kp = np.array([21.1, 20.4, 21.1])
-Ki = np.array([21, 21, 21])
+Kp = np.array([30, 30, 30])
+Ki = np.array([0, 0, 0])
 Kd = np.array([0, 0, 0])
+beta = 0.6  # Filter coefficient for discrete PID
 
 # Desired angular velocity for each wheel (could come from a trajectory generator)
 # omega_ref = np.zeros((len(T), 3))
@@ -81,6 +82,15 @@ omega_ref = np.array(omega_ref)
 # Initialize
 U_pid = np.zeros((len(T), 3))
 e = np.zeros((len(T), 3))  # Error for each wheel
+prev_prev_output = np.zeros(3)  # u[k-2] for discrete PID
+
+# Compute discrete PID coefficients
+b0 = (Kp * (1 + beta*Ts)) + (Ki * Ts * (1 + beta*Ts)) + (Kd * beta)
+b1 = (-Kp * (2 + beta*Ts)) + (Ki * Ts) + (Kd * (2 * beta))
+b2 = Kp + (Kd * beta)
+a0 = 1 + beta*Ts
+a1 = -(2 + beta*Ts)
+a2 = 1
 
 # Extract system matrices
 A, B, C, D = A_z, B_z, C_z, D_z
@@ -100,13 +110,17 @@ for k in range(2, len(T)):
     # Compute error
     e[k] = omega_ref[k] - vel_real
 
-    # Incremental PID law
-    dU = (Kp * (e[k] - e[k-1]) +
-          Ki * e[k] +
-          Kd * (e[k] - 2*e[k-1] + e[k-2]))
-
-    # Update control signal
-    U_pid[k] = U_pid[k-1] + dU
+    # Discrete PID law (from pid_calc_discrete in pid_ext.c)
+    # output = (b0/a0)*error + (b1/a0)*error[k-1] + (b2/a0)*error[k-2]
+    #          - (a1/a0)*output[k-1] - (a2/a0)*output[k-2]
+    U_pid[k] = ((b0/a0)*e[k] + 
+                (b1/a0)*e[k-1] + 
+                (b2/a0)*e[k-2] - 
+                (a1/a0)*U_pid[k-1] - 
+                (a2/a0)*prev_prev_output)
+    
+    # Update previous output for next iteration
+    prev_prev_output = U_pid[k-1].copy()
 
     # Apply input to discrete system: x[k+1] = A*x[k] + B*U[k]
     x = A @ x + B @ U_pid[k]
@@ -185,3 +199,6 @@ ax.set_ylabel("Y Position")
 ax.set_title("Robot Position and Orientation")
 ax.legend()
 ax.grid()
+
+plt.tight_layout()
+plt.show()
