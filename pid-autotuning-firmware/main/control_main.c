@@ -50,7 +50,8 @@ pid_parameter_t pid_paramR = {
     .min_output = -80.0f,
     .set_point = 0.0f,
     .cal_type = PID_CAL_TYPE_DISCRETE,
-    .beta = 0.8f
+    .beta = 0.4f,
+    .sample_time = SAMPLE_TIME
 };
 
 pid_parameter_t pid_paramL = {
@@ -61,7 +62,8 @@ pid_parameter_t pid_paramL = {
     .min_output = -80.0f,
     .set_point = 0.0f,
     .cal_type = PID_CAL_TYPE_DISCRETE,
-    .beta = 0.0f
+    .beta = 0.4f,
+    .sample_time = SAMPLE_TIME
 };
 
 pid_parameter_t pid_paramB = {
@@ -72,7 +74,8 @@ pid_parameter_t pid_paramB = {
     .min_output = -80.0f,
     .set_point = 0.0f,
     .cal_type = PID_CAL_TYPE_DISCRETE,
-    .beta = 0.0f
+    .beta = 0.4f,
+    .sample_time = SAMPLE_TIME
 };
 
 enum movements_num movement = LINEAR; ///< Movement type

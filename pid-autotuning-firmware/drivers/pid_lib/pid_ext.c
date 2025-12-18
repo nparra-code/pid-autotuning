@@ -171,6 +171,7 @@ int pid_update_parameters(pid_block_handle_t pid, const pid_parameter_t *params)
     pid->min_output = params->min_output;
     pid->set_point = params->set_point;
     pid->beta = params->beta;
+    pid->sample_time = params->sample_time;
 
 
     /* Set the calculate function according to the PID type */

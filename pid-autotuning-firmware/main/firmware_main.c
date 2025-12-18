@@ -552,7 +552,7 @@ void app_main(void)
     bldc_enable(&pwmB); ///< Enable the BLDC motor
     bldc_set_duty(&pwmB, 0); ///< Set the duty cycle to 0%
     
-    vTaskDelay(pdMS_TO_TICKS(5000));
+    vTaskDelay(pdMS_TO_TICKS(1500));
     ///<--------------------------------------------------
 
     ///<---------- Initialize the AS5600 sensors ---------
@@ -595,7 +595,7 @@ void app_main(void)
     
     // CRITICAL: Wait for ADC calibration to complete before any tasks use it
     ESP_LOGI(TAG, "Waiting for ADC calibration to stabilize...");
-    vTaskDelay(pdMS_TO_TICKS(5000));
+    vTaskDelay(pdMS_TO_TICKS(1500));
     ///<--------------------------------------------------
 
      ///<------------- Initialize the PID controllers ------

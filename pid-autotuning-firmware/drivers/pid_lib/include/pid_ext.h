@@ -39,6 +39,7 @@ typedef struct {
     float set_point;               // PID set point
     pid_calculate_type_t cal_type; // PID calculation type
     float beta;                    // PID beta filter coefficient of derivative term
+    float sample_time;             // PID sample time in seconds
 } pid_parameter_t;
 
 /**
