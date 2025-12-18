@@ -40,9 +40,9 @@ A, B, C, D = A_z, B_z, C_z, D_z
 
 # --- Parameter grids ---
 # 20   17  0.03   19   16  0.02   20   17  0.03
-Kp_vals1 = np.arange(19.5, 21.5, 0.5)
-Ki_vals1 = np.arange(16.0, 18.5, 0.5)
-Kd_vals1 = np.arange(0.02, 0.04, 0.01)
+Kp_vals1 = np.arange(50, 54, 1)
+Ki_vals1 = np.arange(3, 4, 0.2)
+Kd_vals1 = np.arange(0, 0.02, 0.01)
 
 Kp_vals2 = Kp_vals1
 Ki_vals2 = Ki_vals1
@@ -62,7 +62,7 @@ for Kp_val1, Ki_val1, Kd_val1 in product(Kp_vals1, Ki_vals1, Kd_vals1):
         Ki = np.array([Ki_val1, Ki_val2, Ki_val3])
         Kd = np.array([Kd_val1, Kd_val2, Kd_val3])
 
-        set_err, overshoot, osc, y_log, U_pid = run_pid_sim(Kp, Ki, Kd, A, B, C, D, T, omega_ref)
+        set_err, overshoot, osc, y_log, U_pid = run_pid_sim(Kp, Ki, Kd, 0.7, A, B, C, D, T, omega_ref, Ts, save_to_file=False, file_name="", directory="")
 
         results.append({
             'Kp1': Kp_val1, 'Ki1': Ki_val1, 'Kd1': Kd_val1,

@@ -159,8 +159,30 @@ def quality_metrics(ref, actual, T, tol=0.05):
 
     return setpoint_error, overshoot, oscillation
 
+# Create the inverse kinematic mapping to get wheel velocities from robot velocities
+# From functions.py, we have H matrix that maps wheel velocities to robot velocities
+# We need H^-1 or pseudo-inverse to go from robot velocities to wheel velocities
+def get_wheel_velocities_from_robot_state(robot_vel, phi, d=0.099):
+    """
+    Convert robot velocities [dx, dy, dphi] to wheel velocities [w1, w2, w3]
+    using the H matrix from the omniwheel kinematics
+    """
+    delt = np.pi/6
+    phi = phi + delt
+    
+    H = np.array([[0, -1, d],
+                  [np.cos(delt), np.sin(delt), d],
+                  [-np.cos(delt), np.sin(delt), d]])
+    
+    Rphi = np.array([[np.cos(phi), np.sin(phi), 0],
+                     [-np.sin(phi), np.cos(phi), 0],
+                     [0, 0, 1]])
+    
+    # wheel_vel = H @ Rphi @ robot_vel (in local frame)
+    wheel_vel = H @ Rphi @ robot_vel
+    return wheel_vel
 
-def run_pid_sim(Kp, Ki, Kd, A, B, C, D, T, omega_ref, save_to_file, file_name, directory):
+def run_pid_sim(Kp, Ki, Kd, beta, A, B, C, D, T, omega_ref, Ts, save_to_file, file_name, directory):
     """Run PID loop simulation for given gains."""
     x = np.zeros((A.shape[0],))
     U_pid = np.zeros((len(T), 3))
@@ -168,25 +190,48 @@ def run_pid_sim(Kp, Ki, Kd, A, B, C, D, T, omega_ref, save_to_file, file_name, d
     x_log = np.zeros((len(T), 6))
     y_log = np.zeros((len(T), 6))
 
+    # Compute discrete PID coefficients
+    b0 = (Kp * (1 + beta*Ts)) + (Ki * Ts * (1 + beta*Ts)) + (Kd * beta)
+    b1 = (-Kp * (2 + beta*Ts)) + (Ki * Ts) + (Kd * (2 * beta))
+    b2 = Kp + (Kd * beta)
+    a0 = 1 + beta*Ts
+    a1 = -(2 + beta*Ts)
+    a2 = 1
+
     # Initialize data containers before the loop
     X_samples = []
     Y_samples = []
 
     for k in range(2, len(T)):
-        vel_real = x[3:6]
-        e[k] = omega_ref[k] - vel_real
-        dU = (Kp * (e[k] - e[k-1]) +
-              Ki * e[k] +
-              Kd * (e[k] - 2*e[k-1] + e[k-2]))
-        U_pid[k] = U_pid[k-1] + dU
+        # Get robot velocities in world frame
+        robot_vel = x[3:6]  # [dx, dy, dphi]
+        phi_current = x[2]
+
+        wheel_vel_actual = get_wheel_velocities_from_robot_state(robot_vel, phi_current)
+
+        # Convert reference robot velocities to reference wheel velocities
+        # omega_ref is already in wheel velocity space if generated correctly
+        # But let's ensure consistency
+        wheel_vel_ref = omega_ref[k]
+
+        # Compute error in wheel velocity space
+        e[k] = wheel_vel_ref - wheel_vel_actual
+
+        # Now each PID controller independently controls its wheel
+        U_pid[k] = ((b0/a0)*e[k] + 
+                    (b1/a0)*e[k-1] + 
+                    (b2/a0)*e[k-2] - 
+                    (a1/a0)*U_pid[k-1] - 
+                    (a2/a0)*U_pid[k-2])
+    
         x = A @ x + B @ U_pid[k]
         y = C @ x + D @ U_pid[k]
         x_log[k] = x
         y_log[k] = y
 
         if save_to_file:
-          s_k = vel_real.flatten()
-          r_k = omega_ref[k].flatten()
+          s_k = wheel_vel_actual.flatten()
+          r_k = wheel_vel_ref.flatten()
           e_k = e[k].flatten()
           e_k1 = e[k-1].flatten()
           e_k2 = e[k-2].flatten()

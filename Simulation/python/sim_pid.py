@@ -43,46 +43,25 @@ X0 = [0, 0, 0, 0, 0, 0]
 
 # PID parameters for each wheel
 # [21.1, 20.4, 21.1]  [18.1, 15.9, 18.1]  [0.03, 0.02, 0.03]
-Kp = np.array([30, 30, 30])
-Ki = np.array([0, 0, 0])
+Kp = np.array([53, 50, 50])
+Ki = np.array([3.8, 3.0, 3.4])
 Kd = np.array([0, 0, 0])
-beta = 0.6  # Filter coefficient for discrete PID
-
-# Desired angular velocity for each wheel (could come from a trajectory generator)
-# omega_ref = np.zeros((len(T), 3))
-# omega_ref[:, 0] = 5 * (np.mod(T, 2) < 1).astype(float)  # Example square pulse
-# omega_ref[:, 1] = 10 * (np.mod(T, 2) < 1).astype(float)
-# omega_ref[:, 2] = -20 * (np.mod(T, 2) < 1).astype(float)
-
-# omega_ref, T = generate_omega_ref_trajectory(
-#     mov_tuples_list=[
-#         (True, 2, 0, 2),
-#         (True, 2, -90, 2),
-#         (False, 2, 0, 2),
-#         (False, 2, -90, 2)
-
-#     ], Ts=0.01
-# )
+beta = 0.9  # Filter coefficient for discrete PID
 
 omega_ref = []
 
-time = 10
-T = np.arange(0, time, Ts)
-n_steps = int(time / Ts)
-for t_steps in T:
-  x_v, y_v = circ_move(True, 1, 360, 2, t_steps)
-  omega_vals = [
-    lin_to_ang_vel(x_v, y_v, 1),
-    lin_to_ang_vel(x_v, y_v, 2),
-    lin_to_ang_vel(x_v, y_v, 3)
-  ]
-  omega_ref.append(omega_vals)
-omega_ref = np.array(omega_ref)
+omega_ref, T = generate_omega_ref_trajectory(
+    mov_tuples_list=[
+        ('linear', True,  0.05,   0, 0, 2),
+        ('linear', True,  0.05, -90, 0, 2),
+        ('linear', False, 0.05,   0, 0, 2),
+        ('linear', False, 0.05, -90, 0, 2)
+    ], Ts=Ts
+)
 
 # Initialize
 U_pid = np.zeros((len(T), 3))
 e = np.zeros((len(T), 3))  # Error for each wheel
-prev_prev_output = np.zeros(3)  # u[k-2] for discrete PID
 
 # Compute discrete PID coefficients
 b0 = (Kp * (1 + beta*Ts)) + (Ki * Ts * (1 + beta*Ts)) + (Kd * beta)
@@ -104,23 +83,28 @@ Y_samples = []
 
 # Control loop simulation
 for k in range(2, len(T)):
-    # Measure: get current wheel velocities (dx, dy, dphi can be converted)
-    vel_real = x[3:6]
+    # Get robot velocities in world frame
+    robot_vel = x[3:6]  # [dx, dy, dphi]
+    phi_current = x[2]
+    
+    # Convert robot velocities to actual wheel velocities
+    wheel_vel_actual = get_wheel_velocities_from_robot_state(robot_vel, phi_current)
+    
+    # Convert reference robot velocities to reference wheel velocities
+    # omega_ref is already in wheel velocity space if generated correctly
+    # But let's ensure consistency
+    wheel_vel_ref = omega_ref[k]
 
-    # Compute error
-    e[k] = omega_ref[k] - vel_real
+    # Compute error in wheel velocity space
+    e[k] = wheel_vel_ref - wheel_vel_actual
 
     # Discrete PID law (from pid_calc_discrete in pid_ext.c)
-    # output = (b0/a0)*error + (b1/a0)*error[k-1] + (b2/a0)*error[k-2]
-    #          - (a1/a0)*output[k-1] - (a2/a0)*output[k-2]
+    # Now each PID controller independently controls its wheel
     U_pid[k] = ((b0/a0)*e[k] + 
                 (b1/a0)*e[k-1] + 
                 (b2/a0)*e[k-2] - 
                 (a1/a0)*U_pid[k-1] - 
-                (a2/a0)*prev_prev_output)
-    
-    # Update previous output for next iteration
-    prev_prev_output = U_pid[k-1].copy()
+                (a2/a0)*U_pid[k-2])
 
     # Apply input to discrete system: x[k+1] = A*x[k] + B*U[k]
     x = A @ x + B @ U_pid[k]
@@ -136,7 +120,7 @@ for k in range(2, len(T)):
     # Input features: [s[k], r[k], e[k], e[k-1], e[k-2]]
     # Here: s[k] = current measured velocity (can flatten or choose one axis)
     # r[k] = reference velocity
-    s_k = vel_real.flatten()
+    s_k = wheel_vel_actual.flatten()
     r_k = omega_ref[k].flatten()
     e_k = e[k].flatten()
     e_k1 = e[k-1].flatten()
