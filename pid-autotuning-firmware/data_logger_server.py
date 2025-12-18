@@ -49,26 +49,26 @@ CSV_HEADER = [
     "error_2_k", "error_2_k1", "error_2_k2"
 ]
 
-#define PID_KP_R 0.0 //.01f Proportional gain for right motor
-#define PID_KI_R 0.01 //.01f Integral gain for right motor
-#define PID_KD_R 0.0 //.001f Derivative gain for right motor
+#define PID_KP_R 2 // Proportional gain for right motor
+#define PID_KI_R 0.0 // Integral gain for right motor
+#define PID_KD_R 0.0 // Derivative gain for right motor
 
-#define PID_KP_L 0.0 //.01f Proportional gain for left motor
-#define PID_KI_L 0.01 //.01f Integral gain for left motor
-#define PID_KD_L 0.0 //.001f Derivative gain for left motor
+#define PID_KP_L 2 // Proportional gain for left motor
+#define PID_KI_L 0.0 // Integral gain for left motor
+#define PID_KD_L 0.0 // Derivative gain for left motor
 
-#define PID_KP_B 0.0 //.01f Proportional gain for back motor
-#define PID_KI_B 0.01 //.01f Integral gain for back motor
-#define PID_KD_B 0.0 //.001f Derivative gain for back motor
+#define PID_KP_B 2 // Proportional gain for back motor
+#define PID_KI_B 0.0 // Integral gain for back motor
+#define PID_KD_B 0.0 // Derivative gain for back motor
 
-PID_KP_R = 0.0
-PID_KI_R = 0.01
+PID_KP_R = 5
+PID_KI_R = 0.0
 PID_KD_R = 0.0
-PID_KP_L = 0.0
-PID_KI_L = 0.01
+PID_KP_L = 5
+PID_KI_L = 0.0
 PID_KD_L = 0.0
-PID_KP_B = 0.0
-PID_KI_B = 0.01
+PID_KP_B = 5
+PID_KI_B = 0.0
 PID_KD_B = 0.0
 
 Kps = [PID_KP_R, PID_KP_L, PID_KP_B]

@@ -15,12 +15,15 @@ import os
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')  # Non-interactive backend for server
+import csv
+import json
 
 import keras
 from keras import losses
 
-model_name = "3wheel_model_lstm_128_tanh_experimental"
+model_name = "3wheel_model_lstm_128_tanh_experimental_1812"
 model_path = f"{model_name}.h5"
+RUNS_TO_CONVERGE = 4
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -49,6 +52,18 @@ PID_RESPONSE_STRUCT = struct.Struct('<9fBB')  # 9 floats (3x3 PID) + 2 bytes
 # Visualization configuration
 PLOT_DIR = "autotuning_plots"
 os.makedirs(PLOT_DIR, exist_ok=True)
+
+# Data logging configuration
+LOG_DIR = "autotuning_logs"
+os.makedirs(LOG_DIR, exist_ok=True)
+CSV_HEADER = [
+    "timestamp_ms",
+    "motor_state_0", "motor_state_1", "motor_state_2",
+    "motor_setpoint_0", "motor_setpoint_1", "motor_setpoint_2",
+    "error_0_k", "error_0_k1", "error_0_k2",
+    "error_1_k", "error_1_k1", "error_1_k2",
+    "error_2_k", "error_2_k1", "error_2_k2"
+]
 
 def build_sequences(X, seq_len=20):
     X_seq = []
@@ -266,6 +281,112 @@ def build_sequences(X, seq_len=20):
         X_seq.append(X[i:i+seq_len])
     return np.array(X_seq)
 
+class DataLogger:
+    """Handles logging of telemetry data to files"""
+    
+    def __init__(self, session_id: str, pid_constants: Optional[np.ndarray] = None, log_dir: str = LOG_DIR):
+        self.log_dir = log_dir
+        self.session_id = session_id
+        self.pid_constants = pid_constants
+        
+        # Create log directory if it doesn't exist
+        os.makedirs(self.log_dir, exist_ok=True)
+        
+        # Format PID constants for filename if provided
+        pid_suffix = ""
+        if pid_constants is not None:
+            Kp = pid_constants[0].tolist() if hasattr(pid_constants[0], 'tolist') else list(pid_constants[0])
+            Ki = pid_constants[1].tolist() if hasattr(pid_constants[1], 'tolist') else list(pid_constants[1])
+            Kd = pid_constants[2].tolist() if hasattr(pid_constants[2], 'tolist') else list(pid_constants[2])
+            pid_suffix = f"_Kp{Kp}_Ki{Ki}_Kd{Kd}"
+        
+        # File paths
+        self.csv_path = os.path.join(self.log_dir, f"autotuning_{self.session_id}{pid_suffix}.csv")
+        self.raw_path = os.path.join(self.log_dir, f"autotuning_{self.session_id}{pid_suffix}_raw.bin")
+        self.meta_path = os.path.join(self.log_dir, f"autotuning_{self.session_id}{pid_suffix}_meta.json")
+        
+        # Statistics
+        self.total_samples = 0
+        self.session_start = datetime.now()
+        
+        # Initialize CSV file
+        self._init_csv()
+        
+        # Initialize metadata
+        self._init_metadata()
+        
+        logger.info(f"Data logger initialized. Session ID: {self.session_id}")
+        logger.info(f"CSV log: {self.csv_path}")
+    
+    def _init_csv(self):
+        """Initialize CSV file with header"""
+        with open(self.csv_path, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(CSV_HEADER)
+        logger.info(f"Created CSV file: {self.csv_path}")
+    
+    def _init_metadata(self):
+        """Initialize metadata file"""
+        metadata = {
+            "session_id": self.session_id,
+            "start_time": self.session_start.isoformat(),
+            "protocol_version": PROTOCOL_VERSION,
+            "total_samples": 0,
+            "csv_file": os.path.basename(self.csv_path),
+            "raw_file": os.path.basename(self.raw_path),
+            "pid_constants": self.pid_constants.tolist() if self.pid_constants is not None else None
+        }
+        self._write_metadata(metadata)
+    
+    def _write_metadata(self, metadata: dict):
+        """Write metadata to JSON file"""
+        with open(self.meta_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+    
+    def log_samples(self, samples: np.ndarray):
+        """
+        Log samples to CSV and raw binary files
+        
+        Args:
+            samples: Numpy array of samples (n_samples, 16)
+        """
+        # Write to CSV
+        with open(self.csv_path, 'a', newline='') as f:
+            writer = csv.writer(f)
+            for sample in samples:
+                writer.writerow(sample)
+        
+        # Write to raw binary (for exact reproduction)
+        with open(self.raw_path, 'ab') as f:
+            for sample in samples:
+                # Pack sample data using the struct format
+                # Convert timestamp to int, keep rest as floats
+                timestamp = int(sample[0])
+                float_values = [float(x) for x in sample[1:]]
+                packed = ROBOT_SAMPLE_STRUCT.pack(timestamp, *float_values)
+                f.write(packed)
+        
+        # Update statistics
+        self.total_samples += len(samples)
+        
+        logger.info(f"Logged {len(samples)} samples (total: {self.total_samples})")
+    
+    def finalize(self):
+        """Finalize logging session and update metadata"""
+        metadata = {
+            "session_id": self.session_id,
+            "start_time": self.session_start.isoformat(),
+            "end_time": datetime.now().isoformat(),
+            "duration_seconds": (datetime.now() - self.session_start).total_seconds(),
+            "protocol_version": PROTOCOL_VERSION,
+            "total_samples": self.total_samples,
+            "csv_file": os.path.basename(self.csv_path),
+            "raw_file": os.path.basename(self.raw_path),
+            "pid_constants": self.pid_constants.tolist() if self.pid_constants is not None else None
+        }
+        self._write_metadata(metadata)
+        logger.info(f"Session finalized: {self.total_samples} samples")
+
 class PIDAutotuner:
     """Mock RNN-based PID autotuner - replace with your actual model"""
     
@@ -346,8 +467,8 @@ class PIDAutotuner:
             [mean_gains[2], mean_gains[5], mean_gains[8]]
         ])
         
-        # Mock convergence after 10 iterations
-        converged = self.iteration >= 2
+        # Mock convergence after RUNS_TO_CONVERGE iterations
+        converged = self.iteration >= RUNS_TO_CONVERGE
         
         # TODO: Replace above with actual model inference:
         # features = self.preprocess(samples)
@@ -378,6 +499,10 @@ class TelemetryServer:
         self.pid_constants_after = None
         self.tuning_phase = "before"  # "before", "tuning", "after"
         self.session_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Data loggers for before and after tuning
+        self.logger_before = None
+        self.logger_after = None
         
         logger.info("Telemetry server initialized with data accumulation and visualization support")
     
@@ -510,19 +635,25 @@ class TelemetryServer:
                     if self.tuning_phase == "before":
                         # First data batch - before tuning
                         logger.info("Storing BEFORE tuning data")
-                        self.samples_before_tuning = all_samples.copy()
+                        if self.autotuner.iteration == 0:
+                            self.samples_before_tuning = all_samples.copy()
+                            
+                            # Initialize data logger for "before" phase
+                            self.pid_constants_before = np.array([
+                                [4, 4, 4],  # Initial Kp
+                                [0, 0, 0],  # Initial Ki
+                                [0, 0, 0]   # Initial Kd
+                            ])
+                            self.logger_before = DataLogger(
+                                session_id=f"{self.session_timestamp}_before",
+                                pid_constants=self.pid_constants_before
+                            )
+                            self.logger_before.log_samples(all_samples)
+                            self.logger_before.finalize()
                         
                         # Run inference to get new PID constants
                         pid_constants, converged = self.autotuner.predict_pid(all_samples)
                         self.pid_constants_after = pid_constants
-                        
-                        # Assume we start with some initial constants (you can modify this)
-                        # Extract from the data or use defaults
-                        self.pid_constants_before = np.array([
-                            [0.01, 0.01, 0.015],  # Initial Kp
-                            [0.025, 0.025, 0.025],  # Initial Ki
-                            [0.0, 0.0005, 0.0005]   # Initial Kd
-                        ])
                         
                         # Send new PID response
                         response = self.create_pid_response(
@@ -533,15 +664,27 @@ class TelemetryServer:
                         client_socket.sendall(response)
                         logger.info(f"Sent PID response: iteration={self.autotuner.iteration}, converged={converged}")
                         
-                        # Move to after phase
-                        self.tuning_phase = "after"
+                        # Move to after phase only on the last inference iteration
+                        if self.autotuner.iteration == RUNS_TO_CONVERGE-1:
+                            self.tuning_phase = "after"
+                            logger.info("Phase changed to 'after' - waiting for post-tuning data...")
+                        else:
+                            logger.info(f"Continuing inference phase (iteration {self.autotuner.iteration}/{RUNS_TO_CONVERGE-1})")
+                        
                         self.accumulated_samples = []
-                        logger.info("Phase changed to 'after' - waiting for post-tuning data...")
                         
                     elif self.tuning_phase == "after":
                         # Second data batch - after tuning
                         logger.info("Storing AFTER tuning data")
                         self.samples_after_tuning = all_samples.copy()
+                        
+                        # Initialize data logger for "after" phase
+                        self.logger_after = DataLogger(
+                            session_id=f"{self.session_timestamp}_after",
+                            pid_constants=self.pid_constants_after
+                        )
+                        self.logger_after.log_samples(all_samples)
+                        self.logger_after.finalize()
                         
                         # Generate comparison plots
                         if self.samples_before_tuning is not None:
@@ -574,6 +717,8 @@ class TelemetryServer:
                         self.tuning_phase = "before"
                         self.accumulated_samples = []
                         self.session_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        self.logger_before = None
+                        self.logger_after = None
                         logger.info("Session complete - reset for next tuning cycle")
                     
                     continue
