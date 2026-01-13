@@ -7,17 +7,26 @@ import control as ct
 from control.matlab import *
 import matplotlib.pyplot as plt
 from scipy.signal import square
+import pandas as pd
 
 # Simulation parameters
 Ts = 0.01
-time = 10
-T = np.arange(0, time, Ts)
+
+omega_ref = []
+
+omega_ref, T = generate_omega_ref_trajectory(
+    mov_tuples_list=[
+       #(type    ,fw/cw,  lv, ang, r, t)
+        ('linear', True,  10,  90, 0, 10),
+        ('linear', True,  10,   0, 0, 5),
+        ('linear', False, 20,   0, 0, 7),
+        ('circular', True, 5, 360, 100, 130)
+    ], Ts=Ts
+)
 
 # ==========================
 # 1) Construct the discrete linear system
 # ==========================
-Ts = 0.01
-
 # Define the nonlinear system
 io_sys = ct.nlsys(
     updfnc_omniwheel, outfnc_omniwheel, inputs=('u1', 'u2', 'u3'),
@@ -46,37 +55,6 @@ X0 = [0, 0, 0, 0, 0, 0]
 Kp = np.array([21.1, 20.4, 21.1])
 Ki = np.array([18.1, 15.9, 18.1])
 Kd = np.array([0.03, 0.02, 0.03])
-beta = 0.9  # Filter coefficient for discrete PID
-
-omega_ref = []
-
-# // movement = {type, direction, linear velocity, angle, radius, duration}
-#     Movement movements[] = {
-#         {LINEAR, true, 12, 90, .0, 10.0f},
-#         {LINEAR, true, 10, 0, .0, 5.0f},
-#         {LINEAR, false, 20, 0, .0, 7.0f},
-#         {CIRCULAR, true, 5, 360, 20.0f, (360.0 / 360.0) * 2 * PI * 20.0f / 5}
-#     };
-
-omega_ref, T = generate_omega_ref_trajectory(
-    mov_tuples_list=[
-        ('circular', True, 5, 360, 20, 28),
-        ('linear', True,  12,  0, 0, 10),
-        ('linear', True,  10,   90, 0, 5),
-        ('linear', False, 20,   0, 0, 7)
-    ], Ts=Ts
-)
-
-print(10/Ts)
-
-# omega_ref, T = generate_omega_ref_trajectory(
-#     mov_tuples_list=[
-#         ('linear', True,  0.05,   0, 0, 2),
-#         ('linear', True,  0.05, -90, 0, 2),
-#         ('linear', False, 0.05,   0, 0, 2),
-#         ('linear', False, 0.05, -90, 0, 2)
-#     ], Ts=Ts
-# )
 
 # Initialize
 U_pid = np.zeros((len(T), 3))
@@ -141,6 +119,20 @@ for k in range(2, len(T)):
 X_samples = np.array(X_samples)
 Y_samples = np.array(Y_samples)
 
+# Save X_samples to CSV with appropriate headers
+# import pandas as pd
+# header = [
+#     'motor_state_0', 'motor_state_1', 'motor_state_2',
+#     'motor_setpoint_0', 'motor_setpoint_1', 'motor_setpoint_2',
+#     'error_0_k', 'error_0_k1', 'error_0_k2',
+#     'error_1_k', 'error_1_k1', 'error_1_k2',
+#     'error_2_k', 'error_2_k1', 'error_2_k2'
+# ]
+# df_X_samples = pd.DataFrame(X_samples, columns=header)
+# csv_filename = f'X_samples_Kp{Kp[0]}_Ki{Ki[0]}_Kd{Kd[0]}.csv'
+# df_X_samples.to_csv(csv_filename, index=False)
+# print(f"X_samples saved to: {csv_filename}")
+
 # -------------------------------
 # After loop: reuse U_pid
 # -------------------------------
@@ -153,6 +145,8 @@ y_pos = y_out[1]
 
 x_pos_world = (x_pos * np.cos((np.pi/4)) - y_pos * np.sin((np.pi/4)))
 y_pos_world = (x_pos * np.sin((np.pi/4)) + y_pos * np.cos((np.pi/4)))
+
+print(x_pos_world[int((22+13)/Ts)], y_pos_world[int((22+13)/Ts)])
 
 # np.savez(f'/content/drive/MyDrive/pid_autotuning/data/train/run_n16{Ts}{Kp}{Ki}{Kd}_4.npz', X=X_samples, y=Y_samples)
 # np.savez(f'/content/drive/MyDrive/pid_autotuning/data/to_predict/run_{Ts}{Kp}{Ki}{Kd}.npz', X=X_samples, y=Y_samples)
@@ -182,9 +176,7 @@ plt.plot(x_pos_world, y_pos_world, marker="o", label="Robot Path")
 # Ensure equal axis scaling for better spatial interpretation
 plt.gca().set_aspect('equal', adjustable='box')
 plt.xlabel("X Position")
-plt.xlim(-200, 500)
 plt.ylabel("Y Position")
-plt.ylim(-200, 500)
 plt.title("Robot Position and Orientation")
 plt.legend()
 plt.grid()

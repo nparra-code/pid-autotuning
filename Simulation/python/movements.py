@@ -25,14 +25,39 @@ def lin_move(f, lin_vel, angle):
     return lin_vel * sin(angle * pi / 180.0), lin_vel * cos(angle * pi / 180.0)
 
 def circ_move(cw, lin_velocity, angle, radius, t):
-
-    if t < (angle / 360.0) * 2 * pi * radius / lin_velocity: #Time to reach the goal angle in seconds 360° is a full circle
+    """
+    Generate velocity components for circular motion.
+    
+    Args:
+        cw: True for clockwise, False for counter-clockwise
+        lin_velocity: tangential velocity (linear speed along the circle)
+        angle: total angle to traverse in degrees
+        radius: radius of the circular path
+        t: current time instant
+    
+    Returns:
+        (vx, vy): velocity components in x and y directions
+    """
+    # Calculate time needed to complete the desired angle
+    time_to_complete = (angle / 360.0) * 2 * pi * radius / lin_velocity
+    
+    if t < time_to_complete:
+        # Current angle traversed (in radians)
+        theta = (lin_velocity / radius) * t
+        
+        # Velocity components for circular motion
+        # For counter-clockwise motion (standard mathematical convention)
+        vx = -lin_velocity * sin(theta)
+        vy = lin_velocity * cos(theta)
+        
+        # Flip direction for clockwise motion
         if cw:
-            return -radius * sin((lin_velocity / radius) * t), radius * cos((lin_velocity / radius) * t)
+            return vx, -vy
         else:
-            return -radius * sin((lin_velocity / radius) * t), -radius * cos((lin_velocity / radius) * t)
+            return vx, vy
     else:
-      return 0.0, 0.0
+        # Motion complete, return zero velocity
+        return 0.0, 0.0
 
 x_v, y_v = lin_move(True, 3, 7)
 print(x_v, y_v)
