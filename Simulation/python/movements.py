@@ -1,10 +1,10 @@
 from math import sqrt, sin, cos, pi
-N = 16
-R = 3.25
-DELTA = pi/6
+N = 1
+R = 1
+DELTA = pi/4
 
 def lin_to_ang_vel(x_velocity, y_velocity, wheel):
-  scale = N / R;
+  scale = N / R
 
   cos_d = cos(DELTA)
   sin_d = sin(DELTA)

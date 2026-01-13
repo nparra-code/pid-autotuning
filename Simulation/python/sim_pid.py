@@ -43,33 +43,44 @@ X0 = [0, 0, 0, 0, 0, 0]
 
 # PID parameters for each wheel
 # [21.1, 20.4, 21.1]  [18.1, 15.9, 18.1]  [0.03, 0.02, 0.03]
-Kp = np.array([53, 50, 50])
-Ki = np.array([3.8, 3.0, 3.4])
-Kd = np.array([0, 0, 0])
+Kp = np.array([21.1, 20.4, 21.1])
+Ki = np.array([18.1, 15.9, 18.1])
+Kd = np.array([0.03, 0.02, 0.03])
 beta = 0.9  # Filter coefficient for discrete PID
 
 omega_ref = []
 
+# // movement = {type, direction, linear velocity, angle, radius, duration}
+#     Movement movements[] = {
+#         {LINEAR, true, 12, 90, .0, 10.0f},
+#         {LINEAR, true, 10, 0, .0, 5.0f},
+#         {LINEAR, false, 20, 0, .0, 7.0f},
+#         {CIRCULAR, true, 5, 360, 20.0f, (360.0 / 360.0) * 2 * PI * 20.0f / 5}
+#     };
+
 omega_ref, T = generate_omega_ref_trajectory(
     mov_tuples_list=[
-        ('linear', True,  0.05,   0, 0, 2),
-        ('linear', True,  0.05, -90, 0, 2),
-        ('linear', False, 0.05,   0, 0, 2),
-        ('linear', False, 0.05, -90, 0, 2)
+        ('circular', True, 5, 360, 20, 28),
+        ('linear', True,  12,  0, 0, 10),
+        ('linear', True,  10,   90, 0, 5),
+        ('linear', False, 20,   0, 0, 7)
     ], Ts=Ts
 )
+
+print(10/Ts)
+
+# omega_ref, T = generate_omega_ref_trajectory(
+#     mov_tuples_list=[
+#         ('linear', True,  0.05,   0, 0, 2),
+#         ('linear', True,  0.05, -90, 0, 2),
+#         ('linear', False, 0.05,   0, 0, 2),
+#         ('linear', False, 0.05, -90, 0, 2)
+#     ], Ts=Ts
+# )
 
 # Initialize
 U_pid = np.zeros((len(T), 3))
 e = np.zeros((len(T), 3))  # Error for each wheel
-
-# Compute discrete PID coefficients
-b0 = (Kp * (1 + beta*Ts)) + (Ki * Ts * (1 + beta*Ts)) + (Kd * beta)
-b1 = (-Kp * (2 + beta*Ts)) + (Ki * Ts) + (Kd * (2 * beta))
-b2 = Kp + (Kd * beta)
-a0 = 1 + beta*Ts
-a1 = -(2 + beta*Ts)
-a2 = 1
 
 # Extract system matrices
 A, B, C, D = A_z, B_z, C_z, D_z
@@ -83,28 +94,19 @@ Y_samples = []
 
 # Control loop simulation
 for k in range(2, len(T)):
-    # Get robot velocities in world frame
-    robot_vel = x[3:6]  # [dx, dy, dphi]
-    phi_current = x[2]
-    
-    # Convert robot velocities to actual wheel velocities
-    wheel_vel_actual = get_wheel_velocities_from_robot_state(robot_vel, phi_current)
-    
-    # Convert reference robot velocities to reference wheel velocities
-    # omega_ref is already in wheel velocity space if generated correctly
-    # But let's ensure consistency
-    wheel_vel_ref = omega_ref[k]
+    # Measure: get current wheel velocities (dx, dy, dphi can be converted)
+    vel_real = x[3:6]
 
-    # Compute error in wheel velocity space
-    e[k] = wheel_vel_ref - wheel_vel_actual
+    # Compute error
+    e[k] = omega_ref[k] - vel_real
 
-    # Discrete PID law (from pid_calc_discrete in pid_ext.c)
-    # Now each PID controller independently controls its wheel
-    U_pid[k] = ((b0/a0)*e[k] + 
-                (b1/a0)*e[k-1] + 
-                (b2/a0)*e[k-2] - 
-                (a1/a0)*U_pid[k-1] - 
-                (a2/a0)*U_pid[k-2])
+    # Incremental PID law
+    dU = (Kp * (e[k] - e[k-1]) +
+          Ki * e[k] +
+          Kd * (e[k] - 2*e[k-1] + e[k-2]))
+
+    # Update control signal
+    U_pid[k] = U_pid[k-1] + dU
 
     # Apply input to discrete system: x[k+1] = A*x[k] + B*U[k]
     x = A @ x + B @ U_pid[k]
@@ -120,7 +122,7 @@ for k in range(2, len(T)):
     # Input features: [s[k], r[k], e[k], e[k-1], e[k-2]]
     # Here: s[k] = current measured velocity (can flatten or choose one axis)
     # r[k] = reference velocity
-    s_k = wheel_vel_actual.flatten()
+    s_k = vel_real.flatten()
     r_k = omega_ref[k].flatten()
     e_k = e[k].flatten()
     e_k1 = e[k-1].flatten()
@@ -149,40 +151,42 @@ t_out, y_out = ct.input_output_response(sys_lin_z, T, U.T, X0)
 x_pos = y_out[0]
 y_pos = y_out[1]
 
-x_pos_world = x_pos * np.cos((-1.5*np.pi/6)+np.pi) - y_pos * np.sin((-1.5*np.pi/6)+np.pi)
-y_pos_world = x_pos * np.sin((-1.5*np.pi/6)+np.pi) + y_pos * np.cos((-1.5*np.pi/6)+np.pi)
+x_pos_world = (x_pos * np.cos((np.pi/4)) - y_pos * np.sin((np.pi/4)))
+y_pos_world = (x_pos * np.sin((np.pi/4)) + y_pos * np.cos((np.pi/4)))
 
 # np.savez(f'/content/drive/MyDrive/pid_autotuning/data/train/run_n16{Ts}{Kp}{Ki}{Kd}_4.npz', X=X_samples, y=Y_samples)
 # np.savez(f'/content/drive/MyDrive/pid_autotuning/data/to_predict/run_{Ts}{Kp}{Ki}{Kd}.npz', X=X_samples, y=Y_samples)
 
-fig, axs = plt.subplots(2, 1, figsize=(15, 20))
+# fig, axs = plt.subplots(2, 1, figsize=(15, 20))
 
-ax = axs[1]  # Reference to current subplot
+# ax = axs[1]  # Reference to current subplot
 
 # Plot results
-ax.plot(T, omega_ref[:,0], '--', label='ω_ref1')
-ax.plot(T, y_log[:,3], label='ω1 actual')
-ax.plot(T, omega_ref[:,1], '--', label='ω_ref2')
-ax.plot(T, y_log[:,4], label='ω2 actual')
-ax.plot(T, omega_ref[:,2], '--', label='ω_ref3')
-ax.plot(T, y_log[:,5], label='ω3 actual')
-ax.set_xlabel('Time [s]')
-ax.set_ylabel('Wheel Velocities')
-ax.legend()
-ax.set_title('Incremental PID Velocity Tracking per Wheel')
-ax.grid()
+plt.plot(T, omega_ref[:,0], '--', label='ω_ref1')
+plt.plot(T, y_log[:,3], label='ω1 actual')
+plt.plot(T, omega_ref[:,1], '--', label='ω_ref2')
+plt.plot(T, y_log[:,4], label='ω2 actual')
+plt.plot(T, omega_ref[:,2], '--', label='ω_ref3')
+plt.plot(T, y_log[:,5], label='ω3 actual')
+plt.xlabel('Time [s]')
+plt.ylabel('Wheel Velocities')
+plt.legend()
+plt.title('Incremental PID Velocity Tracking per Wheel')
+plt.grid()
+
+plt.show()
 
 # 4.2) Plot position outputs (trajectory)
-ax = axs[0]  # Reference to current subplot
-ax.plot(x_pos_world, y_pos_world, marker="o", label="Robot Path")
+plt.plot(x_pos_world, y_pos_world, marker="o", label="Robot Path")
 
 # Ensure equal axis scaling for better spatial interpretation
-ax.set_aspect('equal', adjustable='datalim')
-ax.set_xlabel("X Position")
-ax.set_ylabel("Y Position")
-ax.set_title("Robot Position and Orientation")
-ax.legend()
-ax.grid()
+plt.gca().set_aspect('equal', adjustable='box')
+plt.xlabel("X Position")
+plt.xlim(-200, 500)
+plt.ylabel("Y Position")
+plt.ylim(-200, 500)
+plt.title("Robot Position and Orientation")
+plt.legend()
+plt.grid()
 
-plt.tight_layout()
 plt.show()
