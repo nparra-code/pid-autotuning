@@ -1,0 +1,12 @@
+{
+  "session_id": "20260113_142846",
+  "start_time": "2026-01-13T14:28:46.112146",
+  "end_time": "2026-01-13T14:29:14.363643",
+  "duration_seconds": 28.2515,
+  "protocol_version": 1,
+  "total_samples": 16000,
+  "csv_file": "motor_ident_20260113_142846.csv",
+  "raw_file": "motor_ident_20260113_142846_raw.bin",
+  "analysis_file": "motor_ident_20260113_142846_analysis.json",
+  "plot_file": "motor_ident_20260113_142846_plot.png"
+}
