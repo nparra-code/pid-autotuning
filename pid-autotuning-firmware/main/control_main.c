@@ -156,6 +156,7 @@ void vTaskControl( void * pvParameters ){
     //     {LINEAR, true, 15, 90, .0, 10.0f},
     //     {CIRCULAR, true, 5, 360, 40.0f, (360.0 / 360.0) * 2 * PI * 40.0f / 5},
     // };
+    // movement = {type, direction, linear velocity, angle, radius, duration}
     Movement movements[] = {
         {LINEAR, true, 12, 90, .0, 10.0f},
         {LINEAR, true, 10, 0, .0, 5.0f},
@@ -249,7 +250,7 @@ void vTaskIdent( void * pvParameters ){
     // Get task name
     const char *task_name = pcTaskGetName(xTaskGetCurrentTaskHandle());
     
-    int pwm[] = {0, 20, 40, 60,/* 80, 60,*/ 40, 20, 0, -20, -40, -60,/* -80, -60,*/ -40, -20, 0};
+    int pwm[] = {0, 20, 40, 60, 80, 60, 40, 20, 0, -20, -40, -60, -80, -60, -40, -20, 0};
 
     while (1)
     {
@@ -262,11 +263,11 @@ void vTaskIdent( void * pvParameters ){
         bldc_set_duty(params->pwm_motor, pwm[pwm_index]);
 
         // Update the PWM index
-        if (pwm_index < 12) {
+        if (pwm_index < 16) {
             pwm_index++;
         }
 
-        vTaskDelay(pdMS_TO_TICKS(1500)); ///< Wait for 1500 ms
+        vTaskDelay(pdMS_TO_TICKS(1000)); ///< Wait for 1500 ms
         ESP_LOGI(task_name, "\tState: %.2f\tSetpoint: %.2f", params->sensor_data->state, pid_block->set_point); ///< Log the PID parameters
     }
 }

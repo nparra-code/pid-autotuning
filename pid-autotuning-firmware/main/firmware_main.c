@@ -489,7 +489,7 @@ static void identification_task(void *pvParameters) {
     control_params_t *params = (control_params_t *) pvParameters;
 
     int cnt = 0;
-    while (cnt < 1500*12) {
+    while (cnt < 1000*16) {
         // Phase 1: Collect data
         ESP_LOGI(TAG, "Collecting %d samples...", TELEMETRY_SAMPLE_WINDOW);
         
@@ -716,12 +716,12 @@ void app_main(void)
 
     ///<-------------- WiFi and Identification ---------------------
     ESP_LOGI(TAG, "Creating identification task...");
-    configASSERT(xTaskCreatePinnedToCore(identification_task, "identification", 8192, &right_control_params, 7, NULL, 0));
+    configASSERT(xTaskCreatePinnedToCore(identification_task, "identification", 8192, &back_control_params, 7, NULL, 0));
     vTaskDelay(pdMS_TO_TICKS(1000));
 
-    configASSERT(xTaskCreatePinnedToCore(vTaskIdent, "rwh_ident_task", 4096, &right_control_params, 9, NULL, 1)); ///< Create the task to identify the right wheel
+    // configASSERT(xTaskCreatePinnedToCore(vTaskIdent, "rwh_ident_task", 4096, &right_control_params, 9, NULL, 1)); ///< Create the task to identify the right wheel
     // configASSERT(xTaskCreatePinnedToCore(vTaskIdent, "lwh_ident_task", 4096, &left_control_params, 9, NULL, 1));   ///< Create the task to identify the left wheel
-    // configASSERT(xTaskCreatePinnedToCore(vTaskIdent, "bwh_ident_task", 4096, &back_control_params, 9, NULL, 1));   ///< Create the task to identify the back wheel
+    configASSERT(xTaskCreatePinnedToCore(vTaskIdent, "bwh_ident_task", 4096, &back_control_params, 9, NULL, 1));   ///< Create the task to identify the back wheel
     ///<--------------------------------------------------------
 
     
