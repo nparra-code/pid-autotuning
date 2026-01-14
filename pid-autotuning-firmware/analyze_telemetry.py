@@ -204,9 +204,9 @@ def calculate_robot_trajectory(df, wheel_radius=0.03, use_setpoint=False):
         omega = 0  # No rotation info without knowing L, keep heading constant
         
         # Transform to global frame
-        vx_global = vx_robot * np.cos(theta[i-1]) - vy_robot * np.sin(theta[i-1])
-        vy_global = vx_robot * np.sin(theta[i-1]) + vy_robot * np.cos(theta[i-1])
-        
+        vx_global = vx_robot * np.cos(5 * np.pi / 6) - vy_robot * np.sin(5 * np.pi / 6)
+        vy_global = vx_robot * np.sin(5 * np.pi / 6) + vy_robot * np.cos(5 * np.pi / 6)
+
         # Integrate position
         x[i] = x[i-1] + vx_global * dt[i]
         y[i] = y[i-1] + vy_global * dt[i]

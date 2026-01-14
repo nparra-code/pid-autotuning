@@ -21,8 +21,8 @@ import json
 import keras
 from keras import losses
 
-model_name = "3wheel_model_lstm_128_tanh_experimental_1812"
-model_path = f"{model_name}.h5"
+model_name = "lstm64tanh_32relu_exp_1401"
+model_path = f"models/{model_name}.h5"
 RUNS_TO_CONVERGE = 4
 
 # Configure logging
@@ -50,11 +50,11 @@ HEADER_STRUCT = struct.Struct('<BBHI')  # type, version, length, checksum (unsig
 PID_RESPONSE_STRUCT = struct.Struct('<9fBB')  # 9 floats (3x3 PID) + 2 bytes
 
 # Visualization configuration
-PLOT_DIR = "autotuning_plots"
+PLOT_DIR = "autotuning_plots_new"
 os.makedirs(PLOT_DIR, exist_ok=True)
 
 # Data logging configuration
-LOG_DIR = "autotuning_logs"
+LOG_DIR = "autotuning_logs_new"
 os.makedirs(LOG_DIR, exist_ok=True)
 CSV_HEADER = [
     "timestamp_ms",
@@ -71,9 +71,9 @@ def build_sequences(X, seq_len=20):
         X_seq.append(X[i:i+seq_len])
     return np.array(X_seq)
 
-def evaluate_pid_performance(samples: np.ndarray, weight_oscillation=0.6, weight_steady_state=0.4) -> float:
+def evaluate_pid_performance(samples: np.ndarray, weight_oscillation=0.6, weight_steady_state=0.4) -> Tuple[float, np.ndarray]:
     """
-    Evaluate PID performance based on oscillation and steady-state error.
+    Evaluate PID performance based on oscillation and steady-state error for each wheel.
     Lower score is better.
     
     Args:
@@ -83,7 +83,8 @@ def evaluate_pid_performance(samples: np.ndarray, weight_oscillation=0.6, weight
         weight_steady_state: Weight for steady-state error metric (default 0.4)
     
     Returns:
-        score: Combined performance score (lower is better)
+        combined_score: Overall combined performance score (lower is better)
+        per_wheel_scores: Array of shape (3,) with scores for each wheel [wheel0, wheel1, wheel2]
     """
     # Extract motor states and setpoints
     motor_state = samples[:, 1:4]      # Shape: (n_samples, 3)
@@ -95,7 +96,7 @@ def evaluate_pid_performance(samples: np.ndarray, weight_oscillation=0.6, weight
     # Measure oscillation: use the variance of the derivative (rate of change)
     # Higher variance = more oscillation
     dt_errors = np.diff(errors, axis=0)
-    oscillation_score = np.mean(np.var(dt_errors, axis=0))
+    oscillation_scores_per_wheel = np.var(dt_errors, axis=0)  # Shape: (3,)
     
     # Measure steady-state error: use the mean absolute error in the last 30% of samples
     # (assuming system should have settled by then)
@@ -104,21 +105,30 @@ def evaluate_pid_performance(samples: np.ndarray, weight_oscillation=0.6, weight
         steady_state_window = min(10, len(samples))
     
     steady_state_errors = errors[-steady_state_window:]
-    steady_state_score = np.mean(np.abs(steady_state_errors))
+    steady_state_scores_per_wheel = np.mean(np.abs(steady_state_errors), axis=0)  # Shape: (3,)
     
-    # Normalize scores (simple approach - you can improve this)
+    # Normalize scores per wheel (simple approach - you can improve this)
     # Oscillation typically ranges 0-10, steady-state 0-5
-    oscillation_normalized = oscillation_score / 10.0
-    steady_state_normalized = steady_state_score / 5.0
+    oscillation_normalized = oscillation_scores_per_wheel / 10.0
+    steady_state_normalized = steady_state_scores_per_wheel / 5.0
     
-    # Combined score
-    combined_score = (weight_oscillation * oscillation_normalized + 
-                     weight_steady_state * steady_state_normalized)
+    # Combined score per wheel
+    per_wheel_scores = (weight_oscillation * oscillation_normalized + 
+                        weight_steady_state * steady_state_normalized)
     
-    logger.info(f"Performance evaluation: oscillation={oscillation_score:.4f}, "
-               f"steady_state={steady_state_score:.4f}, combined_score={combined_score:.4f}")
+    # Overall combined score (mean of all wheels)
+    combined_score = np.mean(per_wheel_scores)
     
-    return combined_score
+    logger.info(f"Performance evaluation:")
+    logger.info(f"  Overall: combined={combined_score:.4f}")
+    logger.info(f"  Wheel 0 (Right): oscillation={oscillation_scores_per_wheel[0]:.4f}, "
+               f"steady_state={steady_state_scores_per_wheel[0]:.4f}, score={per_wheel_scores[0]:.4f}")
+    logger.info(f"  Wheel 1 (Left):  oscillation={oscillation_scores_per_wheel[1]:.4f}, "
+               f"steady_state={steady_state_scores_per_wheel[1]:.4f}, score={per_wheel_scores[1]:.4f}")
+    logger.info(f"  Wheel 2 (Back):  oscillation={oscillation_scores_per_wheel[2]:.4f}, "
+               f"steady_state={steady_state_scores_per_wheel[2]:.4f}, score={per_wheel_scores[2]:.4f}")
+    
+    return combined_score, per_wheel_scores
 
 def calculate_robot_trajectory(samples, wheel_radius=0.03, use_setpoint=False):
     """
@@ -167,13 +177,11 @@ def calculate_robot_trajectory(samples, wheel_radius=0.03, use_setpoint=False):
                        w2[i] * np.sin(wheel_angles[2])) / 3.0
         
         omega = 0  # Simplified (no rotation tracking without wheel base info)
-        
+
         # Transform to global frame
-        # vx_global = vx_robot * np.cos(theta[i-1]) - vy_robot * np.sin(theta[i-1])
-        # vy_global = vx_robot * np.sin(theta[i-1]) + vy_robot * np.cos(theta[i-1])
-        vx_global = vx_robot * np.cos((-1.5*np.pi/6)+np.pi) - vy_robot * np.sin((-1.5*np.pi/6)+np.pi)
-        vy_global = vx_robot * np.sin((-1.5*np.pi/6)+np.pi) + vy_robot * np.cos((-1.5*np.pi/6)+np.pi)
-        
+        vx_global = vx_robot * np.cos(np.pi / 3) - vy_robot * np.sin(np.pi / 3)
+        vy_global = vx_robot * np.sin(np.pi / 3) + vy_robot * np.cos(np.pi / 3)
+
         x[i] = x[i-1] + vx_global * dt[i]
         y[i] = y[i-1] + vy_global * dt[i]
         theta[i] = theta[i-1] + omega * dt[i]
@@ -229,10 +237,45 @@ def plot_comparison_graphs(samples_before, samples_after, pid_before, pid_after,
         ax.plot(time_after, state_after, color=colors_after[motor_idx], 
                linewidth=1.5, label='After Tuning', alpha=0.7)
         
+        # Calculate PID evaluation metrics
+        # Before tuning metrics
+        error_before = state_before - setpoint_before
+        oscillation_before = np.var(np.diff(error_before))
+        steady_state_error_before = np.mean(np.abs(error_before[-int(len(error_before)*0.3):]))
+        
+        # Settling time: time to reach and stay within 5% of setpoint
+        settling_threshold = 0.05 * np.mean(np.abs(setpoint_before))
+        settling_idx_before = None
+        for i in range(len(error_before) - 10):
+            if np.all(np.abs(error_before[i:]) < settling_threshold):
+                settling_idx_before = i
+                break
+        settling_time_before = time_before[settling_idx_before] if settling_idx_before else time_before[-1]
+        
+        # After tuning metrics
+        error_after = state_after - setpoint_after
+        oscillation_after = np.var(np.diff(error_after))
+        steady_state_error_after = np.mean(np.abs(error_after[-int(len(error_after)*0.3):]))
+        
+        settling_idx_after = None
+        for i in range(len(error_after) - 10):
+            if np.all(np.abs(error_after[i:]) < settling_threshold):
+                settling_idx_after = i
+                break
+        settling_time_after = time_after[settling_idx_after] if settling_idx_after else time_after[-1]
+        
+        # Add metrics as text annotation
+        metrics_text = f'BEFORE: Osc: {oscillation_before:.4f}, SSE: {steady_state_error_before:.4f}\n'
+        metrics_text += f'AFTER: Osc: {oscillation_after:.4f}, SSE: {steady_state_error_after:.4f}\n'
+
+        ax.text(0.7, 0.98, metrics_text, transform=ax.transAxes,
+               verticalalignment='top', fontsize=8,
+               bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+        
         ax.set_xlabel('Time (s)')
         ax.set_ylabel('Angular Velocity (rad/s)')
         ax.set_title(f'{motor_names[motor_idx]} - Tracking Performance')
-        ax.legend(loc='best', fontsize=9)
+        ax.legend(loc='upper left', fontsize=9)
         ax.grid(True, alpha=0.3)
     
     # Calculate trajectories
@@ -246,23 +289,23 @@ def plot_comparison_graphs(samples_before, samples_after, pid_before, pid_after,
     ax_traj = fig.add_subplot(gs[0:2, 1])
     
     # Plot both desired trajectories (they should be similar but may have different lengths)
-    ax_traj.plot(x_desired_before, y_desired_before, 'k--', linewidth=2.5, alpha=0.8, 
+    ax_traj.plot(x_desired_before * 100, y_desired_before * 100, 'k--', linewidth=2.5, alpha=0.8, 
                 label='Desired Trajectory', zorder=5)
-    ax_traj.plot(x_before, y_before, color='#FF6B6B', linewidth=2, 
+    ax_traj.plot(x_before * 100, y_before * 100, color='#FF6B6B', linewidth=2, 
                 label='Before Tuning', alpha=0.7)
-    ax_traj.plot(x_after, y_after, color='#2ECC40', linewidth=2, 
+    ax_traj.plot(x_after * 100, y_after * 100, color='#2ECC40', linewidth=2, 
                 label='After Tuning', alpha=0.7)
     
     # Mark start and end points
-    ax_traj.scatter(x_desired_before[0], y_desired_before[0], color='blue', s=150, 
+    ax_traj.scatter(x_desired_before[0] * 100, y_desired_before[0] * 100, color='blue', s=150, 
                    marker='o', label='Start', zorder=10, edgecolors='black', linewidths=2)
-    ax_traj.scatter(x_desired_before[-1], y_desired_before[-1], color='red', s=150, 
+    ax_traj.scatter(x_desired_before[-1] * 100, y_desired_before[-1] * 100, color='red', s=150, 
                    marker='s', label='End (Desired)', zorder=10, edgecolors='black', linewidths=2)
-    ax_traj.scatter(x_after[-1], y_after[-1], color='green', s=150, 
+    ax_traj.scatter(x_after[-1] * 100, y_after[-1] * 100, color='green', s=150, 
                    marker='^', label='End (After Tuning)', zorder=10, edgecolors='black', linewidths=2)
     
-    ax_traj.set_xlabel('X Position (m)')
-    ax_traj.set_ylabel('Y Position (m)')
+    ax_traj.set_xlabel('X Position (cm)')
+    ax_traj.set_ylabel('Y Position (cm)')
     ax_traj.set_title('Robot Trajectory Comparison', fontsize=14, fontweight='bold')
     ax_traj.legend(loc='best')
     ax_traj.grid(True, alpha=0.3)
@@ -286,24 +329,25 @@ def plot_comparison_graphs(samples_before, samples_after, pid_before, pid_after,
     ax_error.set_xlabel('Time (s)')
     ax_error.set_ylabel('Position Error (cm)')
     ax_error.set_title('Trajectory Tracking Error Over Time', fontsize=12, fontweight='bold')
-    ax_error.legend(loc='best')
+    ax_error.legend(loc='upper right')
     ax_error.grid(True, alpha=0.3)
     
     # Add statistics text (calculate separately for each dataset)
-    mean_before = np.mean(error_before)
     max_before = np.max(error_before)
     rmse_before = np.sqrt(np.mean(error_before**2))
-    
-    mean_after = np.mean(error_after)
+    mae_before = np.mean(np.abs(error_before))
+    stddev_before = np.std(error_before)
+
     max_after = np.max(error_after)
     rmse_after = np.sqrt(np.mean(error_after**2))
-    
-    improvement = ((mean_before - mean_after) / mean_before) * 100 if mean_before > 0 else 0
-    
-    stats_text = f'BEFORE: Mean={mean_before:.2f}cm, Max={max_before:.2f}cm, RMSE={rmse_before:.2f}cm\n'
-    stats_text += f'AFTER: Mean={mean_after:.2f}cm, Max={max_after:.2f}cm, RMSE={rmse_after:.2f}cm\n'
+    mae_after = np.mean(np.abs(error_after))
+    stddev_after = np.std(error_after)
+
+    improvement = ((mae_before - mae_after) / mae_before) * 100 if mae_before > 0 else 0
+
+    stats_text = f'BEFORE: Max={max_before:.2f}cm, RMSE={rmse_before:.2f}cm, MAE={mae_before:.2f}cm, StdDev={stddev_before:.2f}cm\n'
+    stats_text += f'AFTER: Max={max_after:.2f}cm, RMSE={rmse_after:.2f}cm, MAE={mae_after:.2f}cm, StdDev={stddev_after:.2f}cm\n'
     stats_text += f'Improvement: {improvement:.1f}%\n'
-    stats_text += f'Note: Before={len(samples_before)} samples, After={len(samples_after)} samples'
     
     ax_error.text(0.02, 0.98, stats_text, transform=ax_error.transAxes,
                  verticalalignment='top', fontsize=9,
@@ -313,10 +357,14 @@ def plot_comparison_graphs(samples_before, samples_after, pid_before, pid_after,
     Kp_before, Ki_before, Kd_before = pid_before
     Kp_after, Ki_after, Kd_after = pid_after
     
+    # Format arrays to avoid scientific notation
+    def format_array(arr):
+        return [f"{val:.4f}" for val in arr]
+    
     title_text = f'PID Auto-Tuning Results Comparison\n'
     title_text += f'Before: Kp={Kp_before}, Ki={Ki_before}, Kd={Kd_before}\n'
-    title_text += f'After: Kp={Kp_after}, Ki={Ki_after}, Kd={Kd_after}'
-    
+    title_text += f'After: Kp=[{Kp_after[0]:.4f}, {Ki_after[0]:.4f}, {Kd_after[0]:.4f}], Ki=[{Kp_after[1]:.4f}, {Ki_after[1]:.4f}, {Kd_after[1]:.4f}], Kd=[{Kp_after[2]:.4f}, {Ki_after[2]:.4f}, {Kd_after[2]:.4f}]'
+
     fig.suptitle(title_text, fontsize=14, fontweight='bold')
     
     # Save figure
@@ -441,18 +489,22 @@ class DataLogger:
         logger.info(f"Session finalized: {self.total_samples} samples")
 
 class PIDAutotuner:
-    """RNN-based PID autotuner with performance tracking"""
+    """RNN-based PID autotuner with performance tracking per wheel"""
     
     def __init__(self):
         self.iteration = 0
         self.converged = False
         
         # Track all iterations for comparison
-        self.iteration_history = []  # List of dicts with {pid_constants, samples, score}
+        self.iteration_history = []  # List of dicts with {pid_constants, samples, score, per_wheel_scores}
         self.best_iteration = None
         self.best_score = float('inf')
         
-        logger.info("PID Autotuner initialized with performance tracking")
+        # Track best iteration per wheel
+        self.best_iteration_per_wheel = [None, None, None]  # [wheel0, wheel1, wheel2]
+        self.best_score_per_wheel = [float('inf'), float('inf'), float('inf')]
+        
+        logger.info("PID Autotuner initialized with per-wheel performance tracking")
         
         # Load trained RNN model
         custom_objects = {
@@ -523,24 +575,34 @@ class PIDAutotuner:
         ])
         
         # Evaluate performance of these PID constants
-        performance_score = evaluate_pid_performance(samples)
+        performance_score, per_wheel_scores = evaluate_pid_performance(samples)
         
         # Store this iteration
         self.iteration_history.append({
             'iteration': self.iteration,
             'pid_constants': pid_constants.copy(),
             'samples': samples.copy(),
-            'score': performance_score
+            'score': performance_score,
+            'per_wheel_scores': per_wheel_scores.copy()
         })
         
-        # Check if this is the best iteration so far
+        # Check if this is the best iteration so far (overall)
         if performance_score < self.best_score:
             self.best_score = performance_score
             self.best_iteration = self.iteration
-            logger.info(f"⭐ NEW BEST! Iteration {self.iteration} with score {performance_score:.4f}")
+            logger.info(f"⭐ NEW BEST OVERALL! Iteration {self.iteration} with score {performance_score:.4f}")
         else:
-            logger.info(f"Iteration {self.iteration} score {performance_score:.4f} "
-                       f"(best is still iteration {self.best_iteration} with {self.best_score:.4f})")
+            logger.info(f"Iteration {self.iteration} overall score {performance_score:.4f} "
+                       f"(best overall is still iteration {self.best_iteration} with {self.best_score:.4f})")
+        
+        # Check if this is the best iteration for each individual wheel
+        for wheel_idx in range(3):
+            if per_wheel_scores[wheel_idx] < self.best_score_per_wheel[wheel_idx]:
+                self.best_score_per_wheel[wheel_idx] = per_wheel_scores[wheel_idx]
+                self.best_iteration_per_wheel[wheel_idx] = self.iteration
+                wheel_names = ['Right', 'Left', 'Back']
+                logger.info(f"⭐ NEW BEST for Wheel {wheel_idx} ({wheel_names[wheel_idx]})! "
+                           f"Iteration {self.iteration} with score {per_wheel_scores[wheel_idx]:.4f}")
         
         # Check convergence
         converged = self.iteration >= RUNS_TO_CONVERGE
@@ -552,7 +614,7 @@ class PIDAutotuner:
     
     def get_best_pid_constants(self) -> np.ndarray:
         """
-        Get the best PID constants from all iterations
+        Get the best PID constants from all iterations (based on overall score)
         
         Returns:
             pid_constants: Best PID constants array of shape (3, 3)
@@ -563,9 +625,50 @@ class PIDAutotuner:
         
         best_iter_data = self.iteration_history[self.best_iteration - 1]
         logger.info(f"Returning BEST PID constants from iteration {self.best_iteration} "
-                   f"with score {best_iter_data['score']:.4f}")
+                   f"with overall score {best_iter_data['score']:.4f}")
         
         return best_iter_data['pid_constants']
+    
+    def get_best_pid_constants_per_wheel(self) -> np.ndarray:
+        """
+        Get the best PID constants for each wheel individually.
+        Each wheel's constants come from the iteration where that wheel performed best.
+        
+        Returns:
+            pid_constants: Best PID constants array of shape (3, 3)
+                          [wheel0_constants, wheel1_constants, wheel2_constants]
+                          where each row is [Kp, Ki, Kd] for that wheel
+        """
+        if len(self.iteration_history) == 0:
+            logger.warning("No iterations recorded yet, returning default values")
+            return np.array([[4, 4, 4], [0, 0, 0], [0, 0, 0]])
+        
+        # Build PID constants matrix from best iteration for each wheel
+        best_pid_per_wheel = np.zeros((3, 3))  # Shape: (3_wheels, 3_pid_params)
+        
+        wheel_names = ['Right', 'Left', 'Back']
+        logger.info("Building best PID constants per wheel:")
+        
+        for wheel_idx in range(3):
+            best_iter_for_wheel = self.best_iteration_per_wheel[wheel_idx]
+            
+            if best_iter_for_wheel is None:
+                # No iteration recorded for this wheel, use default
+                logger.warning(f"  Wheel {wheel_idx} ({wheel_names[wheel_idx]}): No data, using defaults")
+                best_pid_per_wheel[wheel_idx] = [4, 0, 0]
+            else:
+                # Get PID constants from the best iteration for this wheel
+                best_iter_data = self.iteration_history[best_iter_for_wheel - 1]
+                best_pid_per_wheel[wheel_idx] = best_iter_data['pid_constants'][wheel_idx]
+                
+                logger.info(f"  Wheel {wheel_idx} ({wheel_names[wheel_idx]}): "
+                           f"From iteration {best_iter_for_wheel} "
+                           f"(score={best_iter_data['per_wheel_scores'][wheel_idx]:.4f}) "
+                           f"-> Kp={best_pid_per_wheel[wheel_idx, 0]:.3f}, "
+                           f"Ki={best_pid_per_wheel[wheel_idx, 1]:.3f}, "
+                           f"Kd={best_pid_per_wheel[wheel_idx, 2]:.3f}")
+        
+        return best_pid_per_wheel
     
     def get_best_iteration_data(self):
         """Get the complete data from the best iteration"""
@@ -578,6 +681,11 @@ class PIDAutotuner:
         self.iteration = 0
         self.converged = False
         self.iteration_history = []
+        self.best_iteration = None
+        self.best_score = float('inf')
+        self.best_iteration_per_wheel = [None, None, None]
+        self.best_score_per_wheel = [float('inf'), float('inf'), float('inf')]
+        logger.info("PID Autotuner reset for new session")
         self.best_iteration = None
         self.best_score = float('inf')
         logger.info("PID Autotuner reset for new session")
@@ -622,7 +730,6 @@ class TelemetryServer:
         """Parse data batch into numpy array"""
         # First 4 bytes: sample_count (uint16) + sequence_number (uint16)
         sample_count, seq_num = struct.unpack('<HH', data[:4])
-        logger.info(f"Received batch: {sample_count} samples, seq={seq_num}")
         
         # Parse samples
         offset = 4
@@ -636,7 +743,6 @@ class TelemetryServer:
         
         # Convert to numpy array
         samples_array = np.array(samples)
-        logger.info(f"Parsed samples: {samples_array}")
         
         return samples_array
     
@@ -644,7 +750,7 @@ class TelemetryServer:
                            iteration: int, converged: bool) -> bytes:
         """Create PID response message"""
         # Flatten PID constants (Kp0, Kp1, Kp2, Ki0, Ki1, Ki2, Kd0, Kd1, Kd2)
-        pid_flat = pid_constants.T.flatten()
+        pid_flat = abs(pid_constants).T.flatten()
         
         # Pack payload
         payload = PID_RESPONSE_STRUCT.pack(
@@ -683,8 +789,6 @@ class TelemetryServer:
                     break
 
                 msg_type, version, length, checksum = self.parse_header(header_data)
-                logger.info(f"Header: type={msg_type}, version={version}, "
-                           f"length={length}, checksum={checksum:08X}")
                 
                 # Handle different message types
                 if msg_type == MSG_TYPE_DATA_BATCH:
@@ -743,7 +847,7 @@ class TelemetryServer:
                             
                             # Initialize data logger for "before" phase
                             self.pid_constants_before = np.array([
-                                [4, 4, 4],  # Initial Kp
+                                [1, 1, 1],  # Initial Kp
                                 [0, 0, 0],  # Initial Ki
                                 [0, 0, 0]   # Initial Kd
                             ])
@@ -768,18 +872,24 @@ class TelemetryServer:
                         
                         # Move to after phase only on the last inference iteration
                         if self.autotuner.iteration == RUNS_TO_CONVERGE-1:
-                            # Get the BEST PID constants from all iterations
-                            self.pid_constants_after = self.autotuner.get_best_pid_constants()
-                            best_iter_data = self.autotuner.get_best_iteration_data()
+                            # Get the BEST PID constants per wheel (each wheel from its best iteration)
+                            self.pid_constants_after = self.autotuner.get_best_pid_constants_per_wheel()
                             
-                            logger.info(f"🏆 Selected BEST iteration {best_iter_data['iteration']} "
-                                       f"with score {best_iter_data['score']:.4f}")
-                            logger.info(f"Best PID: Kp={self.pid_constants_after[0]}, "
-                                       f"Ki={self.pid_constants_after[1]}, "
-                                       f"Kd={self.pid_constants_after[2]}")
+                            logger.info("🏆 Selected BEST PID constants per wheel:")
+                            logger.info(f"  Wheel 0 (Right): Kp={self.pid_constants_after[0, 0]:.3f}, "
+                                       f"Ki={self.pid_constants_after[0, 1]:.3f}, "
+                                       f"Kd={self.pid_constants_after[0, 2]:.3f}")
+                            logger.info(f"  Wheel 1 (Left):  Kp={self.pid_constants_after[1, 0]:.3f}, "
+                                       f"Ki={self.pid_constants_after[1, 1]:.3f}, "
+                                       f"Kd={self.pid_constants_after[1, 2]:.3f}")
+                            logger.info(f"  Wheel 2 (Back):  Kp={self.pid_constants_after[2, 0]:.3f}, "
+                                       f"Ki={self.pid_constants_after[2, 1]:.3f}, "
+                                       f"Kd={self.pid_constants_after[2, 2]:.3f}")
                             
-                            # Store the best iteration's samples for plotting
-                            self.samples_best_tuning = best_iter_data['samples'].copy()
+                            # Store samples from the best overall iteration for plotting
+                            best_overall_data = self.autotuner.get_best_iteration_data()
+                            if best_overall_data:
+                                self.samples_best_tuning = best_overall_data['samples'].copy()
                             
                             self.tuning_phase = "after"
                             logger.info("Phase changed to 'after' - waiting for post-tuning data...")
