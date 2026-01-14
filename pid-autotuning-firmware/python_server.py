@@ -23,7 +23,13 @@ from keras import losses
 
 model_name = "lstm64tanh_32relu_exp_1401"
 model_path = f"models/{model_name}.h5"
-RUNS_TO_CONVERGE = 4
+RUNS_TO_CONVERGE = 2
+
+CLASSICAL_PID_CONSTANTS = np.array([8.38, 6.53, 3.57,
+                                    0.05, 0.08, 0.09,
+                                    0.008, 0.013, 0.016])
+
+MODE = 1  # 0: Inference, 1: Classical constants
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -265,8 +271,8 @@ def plot_comparison_graphs(samples_before, samples_after, pid_before, pid_after,
         settling_time_after = time_after[settling_idx_after] if settling_idx_after else time_after[-1]
         
         # Add metrics as text annotation
-        metrics_text = f'BEFORE: Osc: {oscillation_before:.4f}, SSE: {steady_state_error_before:.4f}\n'
-        metrics_text += f'AFTER: Osc: {oscillation_after:.4f}, SSE: {steady_state_error_after:.4f}\n'
+        metrics_text = f'Best RNN: Osc: {oscillation_before:.4f}, SSE: {steady_state_error_before:.4f}\n'
+        metrics_text += f'C-C: Osc: {oscillation_after:.4f}, SSE: {steady_state_error_after:.4f}\n'
 
         ax.text(0.7, 0.98, metrics_text, transform=ax.transAxes,
                verticalalignment='top', fontsize=8,
@@ -292,18 +298,18 @@ def plot_comparison_graphs(samples_before, samples_after, pid_before, pid_after,
     ax_traj.plot(x_desired_before * 100, y_desired_before * 100, 'k--', linewidth=2.5, alpha=0.8, 
                 label='Desired Trajectory', zorder=5)
     ax_traj.plot(x_before * 100, y_before * 100, color='#FF6B6B', linewidth=2, 
-                label='Before Tuning', alpha=0.7)
+                label='Best RNN', alpha=0.7)
     ax_traj.plot(x_after * 100, y_after * 100, color='#2ECC40', linewidth=2, 
-                label='After Tuning', alpha=0.7)
-    
+                label='C-C', alpha=0.7)
+
     # Mark start and end points
     ax_traj.scatter(x_desired_before[0] * 100, y_desired_before[0] * 100, color='blue', s=150, 
                    marker='o', label='Start', zorder=10, edgecolors='black', linewidths=2)
     ax_traj.scatter(x_desired_before[-1] * 100, y_desired_before[-1] * 100, color='red', s=150, 
                    marker='s', label='End (Desired)', zorder=10, edgecolors='black', linewidths=2)
     ax_traj.scatter(x_after[-1] * 100, y_after[-1] * 100, color='green', s=150, 
-                   marker='^', label='End (After Tuning)', zorder=10, edgecolors='black', linewidths=2)
-    
+                   marker='^', label='End (C-C)', zorder=10, edgecolors='black', linewidths=2)
+
     ax_traj.set_xlabel('X Position (cm)')
     ax_traj.set_ylabel('Y Position (cm)')
     ax_traj.set_title('Robot Trajectory Comparison', fontsize=14, fontweight='bold')
@@ -319,11 +325,11 @@ def plot_comparison_graphs(samples_before, samples_after, pid_before, pid_after,
     error_after = np.sqrt((x_desired_after - x_after)**2 + (y_desired_after - y_after)**2) * 100  # cm
     
     ax_error.plot(time_before, error_before, color='#FF6B6B', linewidth=2, 
-                 label='Before Tuning', alpha=0.7)
+                 label='Best RNN', alpha=0.7)
     ax_error.fill_between(time_before, 0, error_before, color='#FF6B6B', alpha=0.2)
     
     ax_error.plot(time_after, error_after, color='#2ECC40', linewidth=2, 
-                 label='After Tuning', alpha=0.7)
+                 label='C-C', alpha=0.7)
     ax_error.fill_between(time_after, 0, error_after, color='#2ECC40', alpha=0.2)
     
     ax_error.set_xlabel('Time (s)')
@@ -345,9 +351,9 @@ def plot_comparison_graphs(samples_before, samples_after, pid_before, pid_after,
 
     improvement = ((mae_before - mae_after) / mae_before) * 100 if mae_before > 0 else 0
 
-    stats_text = f'BEFORE: Max={max_before:.2f}cm, RMSE={rmse_before:.2f}cm, MAE={mae_before:.2f}cm, StdDev={stddev_before:.2f}cm\n'
-    stats_text += f'AFTER: Max={max_after:.2f}cm, RMSE={rmse_after:.2f}cm, MAE={mae_after:.2f}cm, StdDev={stddev_after:.2f}cm\n'
-    stats_text += f'Improvement: {improvement:.1f}%\n'
+    stats_text = f'Best RNN: Max={max_before:.2f}cm, RMSE={rmse_before:.2f}cm, MAE={mae_before:.2f}cm, StdDev={stddev_before:.2f}cm\n'
+    stats_text += f'C-C: Max={max_after:.2f}cm, RMSE={rmse_after:.2f}cm, MAE={mae_after:.2f}cm, StdDev={stddev_after:.2f}cm\n'
+    stats_text += f'Change: {improvement:.1f}%\n'
     
     ax_error.text(0.02, 0.98, stats_text, transform=ax_error.transAxes,
                  verticalalignment='top', fontsize=9,
@@ -356,14 +362,18 @@ def plot_comparison_graphs(samples_before, samples_after, pid_before, pid_after,
     # Add title with PID constants
     Kp_before, Ki_before, Kd_before = pid_before
     Kp_after, Ki_after, Kd_after = pid_after
-    
+    if MODE == 1 :
+        Kp_after, Ki_after, Kd_after = ([CLASSICAL_PID_CONSTANTS[0], CLASSICAL_PID_CONSTANTS[3], CLASSICAL_PID_CONSTANTS[6]],
+        [CLASSICAL_PID_CONSTANTS[1], CLASSICAL_PID_CONSTANTS[4], CLASSICAL_PID_CONSTANTS[7]],
+        [CLASSICAL_PID_CONSTANTS[2], CLASSICAL_PID_CONSTANTS[5], CLASSICAL_PID_CONSTANTS[8]])
+
     # Format arrays to avoid scientific notation
     def format_array(arr):
         return [f"{val:.4f}" for val in arr]
     
-    title_text = f'PID Auto-Tuning Results Comparison\n'
-    title_text += f'Before: Kp={Kp_before}, Ki={Ki_before}, Kd={Kd_before}\n'
-    title_text += f'After: Kp=[{Kp_after[0]:.4f}, {Ki_after[0]:.4f}, {Kd_after[0]:.4f}], Ki=[{Kp_after[1]:.4f}, {Ki_after[1]:.4f}, {Kd_after[1]:.4f}], Kd=[{Kp_after[2]:.4f}, {Ki_after[2]:.4f}, {Kd_after[2]:.4f}]'
+    title_text = f'PID Auto-Tuning Results Comparison\n' if MODE == 0 else 'PID Cohen-Coon Results Comparison\n'
+    title_text += f'Best RNN: Kp={Kp_before}, Ki={Ki_before}, Kd={Kd_before}\n'
+    title_text += f'C-C: Kp=[{Kp_after[0]:.4f}, {Ki_after[0]:.4f}, {Kd_after[0]:.4f}], Ki=[{Kp_after[1]:.4f}, {Ki_after[1]:.4f}, {Kd_after[1]:.4f}], Kd=[{Kp_after[2]:.4f}, {Ki_after[2]:.4f}, {Kd_after[2]:.4f}]'
 
     fig.suptitle(title_text, fontsize=14, fontweight='bold')
     
@@ -565,9 +575,9 @@ class PIDAutotuner:
         # RNN inference
         logger.info(f"Running RNN inference on {len(samples)} samples")
         
-        logger.info(f'Kp = np.array([{mean_gains[0]}, {mean_gains[1]}, {mean_gains[2]}])')
-        logger.info(f'Ki = np.array([{mean_gains[3]}, {mean_gains[4]}, {mean_gains[5]}])')
-        logger.info(f'Kd = np.array([{mean_gains[6]}, {mean_gains[7]}, {mean_gains[8]}])')
+        logger.info(f'Kp = np.array([{mean_gains[0]}, {mean_gains[3]}, {mean_gains[6]}])')
+        logger.info(f'Ki = np.array([{mean_gains[1]}, {mean_gains[4]}, {mean_gains[7]}])')
+        logger.info(f'Kd = np.array([{mean_gains[2]}, {mean_gains[5]}, {mean_gains[8]}])')
         pid_constants = np.array([
             [mean_gains[0], mean_gains[3], mean_gains[6]],
             [mean_gains[1], mean_gains[4], mean_gains[7]],
@@ -708,6 +718,7 @@ class TelemetryServer:
         self.samples_after_tuning = None
         self.pid_constants_before = None
         self.pid_constants_after = None
+        self.pid_constants_classical = CLASSICAL_PID_CONSTANTS
         self.tuning_phase = "before"  # "before", "tuning", "after"
         self.session_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
@@ -847,9 +858,9 @@ class TelemetryServer:
                             
                             # Initialize data logger for "before" phase
                             self.pid_constants_before = np.array([
-                                [1, 1, 1],  # Initial Kp
-                                [0, 0, 0],  # Initial Ki
-                                [0, 0, 0]   # Initial Kd
+                                [2.4658, 2.6909, 2.8562],  # Initial Kp
+                                [0.0019, 0.0033, 0.0023],  # Initial Ki
+                                [0.0019, 0.0021, 0.0034]   # Initial Kd
                             ])
                             self.logger_before = DataLogger(
                                 session_id=f"{self.session_timestamp}_before",
@@ -863,7 +874,7 @@ class TelemetryServer:
                         
                         # Send new PID response (current iteration result)
                         response = self.create_pid_response(
-                            pid_constants, 
+                            pid_constants if MODE == 0 else self.pid_constants_classical, 
                             self.autotuner.iteration, 
                             converged
                         )
@@ -932,8 +943,8 @@ class TelemetryServer:
                         
                         # Send acknowledgment with BEST PID constants
                         response = self.create_pid_response(
-                            self.pid_constants_after, 
-                            self.autotuner.iteration, 
+                            self.pid_constants_after if MODE == 0 else self.pid_constants_classical,
+                            self.autotuner.iteration,
                             True  # Mark as converged/complete
                         )
                         client_socket.sendall(response)
