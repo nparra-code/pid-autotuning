@@ -63,5 +63,9 @@ sdkconfig.old
 ___pycache__/
 *.pyc
 telemetry_logs/
+autotuning_logs/
+autotuning_logs_new/
+autotuning_plots/
+autotuning_plots_new/
 env/
 tempCodeRunnerFile.py
