@@ -231,7 +231,7 @@ static void apply_pid_constants(const pid_response_t *pid_response) {
     pid_paramR.ki = pid_response->ki[0];
     pid_paramR.kd = pid_response->kd[0];
     pid_update_parameters(pidR, &pid_paramR);
-    ESP_LOGI(TAG, "  Right Motor: Kp=%.3f, Ki=%.3f, Kd=%.3f",
+    ESP_LOGI(TAG, "  Right Motor: Kp=%.3f, Ki=%.4f, Kd=%.4f",
              pid_paramR.kp, pid_paramR.ki, pid_paramR.kd);
     
     // Update left wheel PID
@@ -683,8 +683,8 @@ void app_main(void)
     ///<-------------- WiFi and Autotuning ---------------------
     ESP_LOGI(TAG, "Creating autotuning task...");
 
-    // configASSERT(xTaskCreatePinnedToCore(autotuning_task, "autotuning", 8192, NULL, 7, NULL, 0));
-    configASSERT(xTaskCreatePinnedToCore(logging_task, "logging", 16384, NULL, 7, NULL, 0));
+    configASSERT(xTaskCreatePinnedToCore(autotuning_task, "autotuning", 8192, NULL, 7, NULL, 0));
+    // configASSERT(xTaskCreatePinnedToCore(logging_task, "logging", 16384, NULL, 7, NULL, 0));
 
     vTaskDelay(pdMS_TO_TICKS(1000));
     ///<--------------------------------------------------------
