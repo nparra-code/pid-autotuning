@@ -5,18 +5,18 @@ import matplotlib.pyplot as plt
 import keras
 from keras import losses
 
-# model_name = "3wheel_model_lstm_128_tanh_new"
-# model_path = f"/content/drive/MyDrive/pid_autotuning/models/{model_name}.h5"
+model_name = "lstm128tanh_64relu_exp_1401"
+model_path = f"python/models/{model_name}.h5"
 
 # Pass the built-in mean_squared_error function under the expected name 'mse'
-# custom_objects = {
-#     'mse': losses.mean_squared_error
-# }
+custom_objects = {
+    'mse': losses.mean_squared_error
+}
 
-# model = keras.models.load_model(
-#     model_path,
-#     custom_objects=custom_objects
-# )
+model = keras.models.load_model(
+    model_path,
+    custom_objects=custom_objects
+)
 
 # Simulation parameters
 Ts = 0.01
@@ -43,25 +43,25 @@ A_z, B_z, C_z, D_z = sys_z.A, sys_z.B, sys_z.C, sys_z.D
 sys_lin_z = ct.StateSpace(A_z, B_z, C_z, D_z, Ts)
 
 # Initial PID parameters
-Kp = np.array([13.074613, 12.121785, 12.510017])
-Ki = np.array([10.834111,  9.564942, 10.935776])
-Kd = np.array([0.1919426,  0.01672415, 0.12179589])
+Kp = np.array([2.3454869, 3.186977, 2.952966])
+Ki = np.array([0.00025076917, 0.003302659, 0.002264485])
+Kd = np.array([0.00069804495, 0.002407863, 0.0038432986])
 
 # Ideal PID parameters
-Kp_ideal = np.array([21.1, 20.4, 21.1])
-Ki_ideal = np.array([18.1, 15.9, 18.1])
-Kd_ideal = np.array([0.03, 0.02, 0.03])
+Kp_ideal = np.array([2.5, 2.3, 2.6])
+Ki_ideal = np.array([0.002, 0.001, 0.002])
+Kd_ideal = np.array([0.003, 0.002, 0.003])
 
 # Desired trajectory generation (Modified time to match simulation time)
-omega_ref, T_actual = generate_omega_ref_trajectory(
+omega_ref, T = generate_omega_ref_trajectory(
     mov_tuples_list=[
-        ('linear', True, 2, 0, 0, 4),
-        ('linear', True, 1, -90, 0, 6),
-        ('linear', False, 3, 0, 0, 5),
-        ('circular', True, 5, 360, 10, (360/360) * 2 * pi * 10 / 5)
-    ], Ts=0.01
+       #(type    ,fw/cw,  lv, ang, r, t)
+        ('linear', True,  12,  90, 0, 10),
+        ('linear', True,  10,   0, 0, 5),
+        ('linear', False, 20,   0, 0, 7),
+        ('circular', True, 5, 360, 20, 28)
+    ], Ts=Ts
 )
-T = np.arange(0, len(omega_ref) * Ts, Ts) # Adjust T length
 
 # Initialize
 U_pid = np.zeros((len(T), 3))
@@ -123,12 +123,13 @@ for k in range(2, len(T)):
     e_ideal[k] = omega_ref[ref_idx] - vel_body_ideal
 
     # Incremental PID law (uses the CURRENTLY active Kp, Ki, Kd)
-    dU = (Kp * (e[k] - e[k-1]) +
-          Ki * e[k] +
-          Kd * (e[k] - 2*e[k-1] + e[k-2]))
-    dU_ideal = (Kp_ideal * (e_ideal[k] - e_ideal[k-1]) +
-                Ki_ideal * e_ideal[k] +
-                Kd_ideal * (e_ideal[k] - 2*e_ideal[k-1] + e_ideal[k-2]))
+    dU = (abs(Kp) * 8.3  * (e[k] - e[k-1]) +
+          abs(Ki) * 8500 * e[k] +
+          abs(Kd) * (e[k] - 2*e[k-1] + e[k-2]))
+
+    dU_ideal = (abs(Kp_ideal) * 8.3  * (e_ideal[k] - e_ideal[k-1]) +
+                abs(Ki_ideal) * 8500 * e_ideal[k] +
+                abs(Kd_ideal) * (e_ideal[k] - 2*e_ideal[k-1] + e_ideal[k-2]))
 
     # Update control signal and apply to discrete system
     U_pid[k] = U_pid[k-1] + dU
@@ -161,12 +162,13 @@ for k in range(2, len(T)):
 X_samples_final = np.array(X_samples)
 Y_samples_final = np.array(Y_samples)
 
-# Kp_new, Ki_new, Kd_new = predict_pid_constants(X_samples, Kp, Ki, Kd, 200, Ts)
-# print("##############################################")
-# print(f"Final Kp: {Kp_new}")
-# print(f"Final Ki: {Ki_new}")
-# print(f"Final Kd: {Kd_new}")
-# print("##############################################")
+Kp_new, Ki_new, Kd_new = predict_pid_constants(model, X_samples)
+print("##############################################")
+print('Inference:')
+print(f"Kp = np.array([{', '.join(map(str, Kp_new))}])")
+print(f"Ki = np.array([{', '.join(map(str, Ki_new))}])")
+print(f"Kd = np.array([{', '.join(map(str, Kd_new))}])")
+print("##############################################")
 
 # -------------------------------
 # After loop: Simulation plotting
@@ -184,7 +186,7 @@ x_pos_ideal = y_out_ideal[0]
 y_pos_ideal = y_out_ideal[1]
 
 # World coordinate transformation
-rot_angle = (-1.5*np.pi/6)+np.pi
+rot_angle = (np.pi/4)
 x_pos_world = x_pos * np.cos(rot_angle) - y_pos * np.sin(rot_angle)
 y_pos_world = x_pos * np.sin(rot_angle) + y_pos * np.cos(rot_angle)
 

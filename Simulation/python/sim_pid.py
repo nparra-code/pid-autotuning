@@ -17,10 +17,10 @@ omega_ref = []
 omega_ref, T = generate_omega_ref_trajectory(
     mov_tuples_list=[
        #(type    ,fw/cw,  lv, ang, r, t)
-        ('linear', True,  10,  90, 0, 10),
+        ('linear', True,  12,  90, 0, 10),
         ('linear', True,  10,   0, 0, 5),
         ('linear', False, 20,   0, 0, 7),
-        ('circular', True, 5, 360, 100, 130)
+        ('circular', True, 5, 360, 20, 28)
     ], Ts=Ts
 )
 
@@ -51,10 +51,13 @@ sys_lin_z = ct.StateSpace(A_z, B_z, C_z, D_z, Ts)
 X0 = [0, 0, 0, 0, 0, 0]
 
 # PID parameters for each wheel
-# [21.1, 20.4, 21.1]  [18.1, 15.9, 18.1]  [0.03, 0.02, 0.03]
-Kp = np.array([21.1, 20.4, 21.1])
-Ki = np.array([18.1, 15.9, 18.1])
-Kd = np.array([0.03, 0.02, 0.03])
+# Kp = np.array([21.1, 20.4, 21.1])
+# Ki = np.array([18.1, 15.9, 18.1])
+# Kd = np.array([0.03, 0.02, 0.03])
+
+Kp = np.array([2.5, 2.3, 2.6])
+Ki = np.array([0.002, 0.001, 0.002])
+Kd = np.array([0.003, 0.002, 0.003])
 
 # Initialize
 U_pid = np.zeros((len(T), 3))
@@ -79,8 +82,8 @@ for k in range(2, len(T)):
     e[k] = omega_ref[k] - vel_real
 
     # Incremental PID law
-    dU = (Kp * (e[k] - e[k-1]) +
-          Ki * e[k] +
+    dU = (Kp * 8.3  * (e[k] - e[k-1]) +
+          Ki * 8500 * e[k] +
           Kd * (e[k] - 2*e[k-1] + e[k-2]))
 
     # Update control signal
@@ -145,8 +148,6 @@ y_pos = y_out[1]
 
 x_pos_world = (x_pos * np.cos((np.pi/4)) - y_pos * np.sin((np.pi/4)))
 y_pos_world = (x_pos * np.sin((np.pi/4)) + y_pos * np.cos((np.pi/4)))
-
-print(x_pos_world[int((22+13)/Ts)], y_pos_world[int((22+13)/Ts)])
 
 # np.savez(f'/content/drive/MyDrive/pid_autotuning/data/train/run_n16{Ts}{Kp}{Ki}{Kd}_4.npz', X=X_samples, y=Y_samples)
 # np.savez(f'/content/drive/MyDrive/pid_autotuning/data/to_predict/run_{Ts}{Kp}{Ki}{Kd}.npz', X=X_samples, y=Y_samples)

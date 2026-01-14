@@ -190,14 +190,6 @@ def run_pid_sim(Kp, Ki, Kd, beta, A, B, C, D, T, omega_ref, Ts, save_to_file, fi
     x_log = np.zeros((len(T), 6))
     y_log = np.zeros((len(T), 6))
 
-    # Compute discrete PID coefficients
-    b0 = (Kp * (1 + beta*Ts)) + (Ki * Ts * (1 + beta*Ts)) + (Kd * beta)
-    b1 = (-Kp * (2 + beta*Ts)) + (Ki * Ts) + (Kd * (2 * beta))
-    b2 = Kp + (Kd * beta)
-    a0 = 1 + beta*Ts
-    a1 = -(2 + beta*Ts)
-    a2 = 1
-
     # Initialize data containers before the loop
     X_samples = []
     Y_samples = []
@@ -207,22 +199,16 @@ def run_pid_sim(Kp, Ki, Kd, beta, A, B, C, D, T, omega_ref, Ts, save_to_file, fi
         robot_vel = x[3:6]  # [dx, dy, dphi]
         phi_current = x[2]
 
-        wheel_vel_actual = get_wheel_velocities_from_robot_state(robot_vel, phi_current)
-
-        # Convert reference robot velocities to reference wheel velocities
-        # omega_ref is already in wheel velocity space if generated correctly
-        # But let's ensure consistency
-        wheel_vel_ref = omega_ref[k]
-
         # Compute error in wheel velocity space
-        e[k] = wheel_vel_ref - wheel_vel_actual
+        e[k] = omega_ref[k] - robot_vel
 
-        # Now each PID controller independently controls its wheel
-        U_pid[k] = ((b0/a0)*e[k] + 
-                    (b1/a0)*e[k-1] + 
-                    (b2/a0)*e[k-2] - 
-                    (a1/a0)*U_pid[k-1] - 
-                    (a2/a0)*U_pid[k-2])
+        # Incremental PID law
+        dU = (Kp * 8.3 * (e[k] - e[k-1]) +
+            Ki * 8500 * e[k] +
+            Kd * (e[k] - 2*e[k-1] + e[k-2]))
+
+        # Update control signal
+        U_pid[k] = U_pid[k-1] + dU
     
         x = A @ x + B @ U_pid[k]
         y = C @ x + D @ U_pid[k]
@@ -230,8 +216,8 @@ def run_pid_sim(Kp, Ki, Kd, beta, A, B, C, D, T, omega_ref, Ts, save_to_file, fi
         y_log[k] = y
 
         if save_to_file:
-          s_k = wheel_vel_actual.flatten()
-          r_k = wheel_vel_ref.flatten()
+          s_k = robot_vel.flatten()
+          r_k = omega_ref[k].flatten()
           e_k = e[k].flatten()
           e_k1 = e[k-1].flatten()
           e_k2 = e[k-2].flatten()
@@ -248,14 +234,14 @@ def run_pid_sim(Kp, Ki, Kd, beta, A, B, C, D, T, omega_ref, Ts, save_to_file, fi
     if save_to_file:
       X_samples = np.array(X_samples)
       Y_samples = np.array(Y_samples)
-      np.savez(f'{directory}_{file_name}.npz', X=X_samples, y=Y_samples)
+      np.savez(f'{directory}{file_name}.npz', X=X_samples, y=Y_samples)
 
     set_err, overshoot, osc = quality_metrics(omega_ref, y_log[:, 3:6], T)
     return set_err, overshoot, osc, y_log, U_pid
 
 def generate_random_motor_params():
     """Generate 1 random set of K_n and Ra_n."""
-    dev_c = 0.35  # 35% deviation
+    dev_c = 0.4  # 35% deviation
     nom_K = 0.259
     nom_Ra = 1.3111
     K_vals = np.random.uniform(nom_K - (nom_K*dev_c), nom_K + (nom_K*dev_c), size=3)      # K1, K2, K3
@@ -299,7 +285,7 @@ def calculate_path_error_metrics(x_actual, y_actual, x_ideal, y_ideal):
     return rmse, mae, abs_err
 
 # --- AI Model Placeholder Function ---
-def predict_pid_constants(X_samples, current_Kp, current_Ki, current_Kd, k, Ts):
+def predict_pid_constants(model, X_samples):
     """
     Placeholder for AI model inference. In a real application, this would:
     1. Aggregate or process X_samples (state, reference, error data) collected.
@@ -308,34 +294,27 @@ def predict_pid_constants(X_samples, current_Kp, current_Ki, current_Kd, k, Ts):
 
     For demonstration, we check the current time 'T[k]' and update Kp1 at t=5.0s.
     """
-    UPDATE_INTERVAL_S = 2.0
-    T_current = k * Ts
+    
 
-    # Check if we are at an update time and have collected samples
-    if np.isclose(T_current % UPDATE_INTERVAL_S, 0) and T_current > 0 and len(X_samples) > 0:
+    X_all = []
+    X_seq = build_sequences(X_samples, 20)
+    X_all.append(X_seq)
+    X_all = np.concatenate(X_all, axis=0)
 
-        X_all = []
-        X_seq = build_sequences(X_samples, 20)
-        X_all.append(X_seq)
-        X_all = np.concatenate(X_all, axis=0)
+    # --- PLACEHOLDER LOGIC: Adjust Kp for wheel 1 ---
+    y_pred = model.predict(X_all, verbose=1)
+    mean_gains = np.mean(y_pred, axis=0)
 
-        # --- PLACEHOLDER LOGIC: Adjust Kp for wheel 1 ---
-        y_pred = model.predict(X_all, verbose=1)
-        mean_gains = np.mean(y_pred, axis=0)
+    Kp_new = np.array([mean_gains[0], mean_gains[1], mean_gains[2]])
+    Ki_new = np.array([mean_gains[3], mean_gains[4], mean_gains[5]])
+    Kd_new = np.array([mean_gains[6], mean_gains[7], mean_gains[8]])
 
-        Kp_new = np.array([mean_gains[0], mean_gains[1], mean_gains[2]])
-        Ki_new = np.array([mean_gains[3], mean_gains[4], mean_gains[5]])
-        Kd_new = np.array([mean_gains[6], mean_gains[7], mean_gains[8]])
+    # print(f'Kp = np.array([{mean_gains[0]}, {mean_gains[1]}, {mean_gains[2]}])')
+    # print(f'Ki = np.array([{mean_gains[3]}, {mean_gains[4]}, {mean_gains[5]}])')
+    # print(f'Kd = np.array([{mean_gains[6]}, {mean_gains[7]}, {mean_gains[8]}])')
 
-        # print(f'Kp = np.array([{mean_gains[0]}, {mean_gains[1]}, {mean_gains[2]}])')
-        # print(f'Ki = np.array([{mean_gains[3]}, {mean_gains[4]}, {mean_gains[5]}])')
-        # print(f'Kd = np.array([{mean_gains[6]}, {mean_gains[7]}, {mean_gains[8]}])')
+    # print(f"\n--- PID CONSTANTS UPDATED at t={T_current}s ---")
+    # print(f"Kp before: {current_Kp}, Kp after: {Kp_new}")
+    # print("-----------------------------------------\n")
 
-        # print(f"\n--- PID CONSTANTS UPDATED at t={T_current}s ---")
-        # print(f"Kp before: {current_Kp}, Kp after: {Kp_new}")
-        # print("-----------------------------------------\n")
-
-        return Kp_new, Ki_new, Kd_new
-
-    # Otherwise, return the current constants
-    return current_Kp.copy(), current_Ki.copy(), current_Kd.copy()
+    return Kp_new, Ki_new, Kd_new
