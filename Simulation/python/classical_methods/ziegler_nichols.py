@@ -8,13 +8,13 @@
 # @param L Dead time
 # @param T Time constant
 # @return Tuple of (Kc, ti, td) for the specified controller type
-def ziegler_nichols_openloop(type, L, T):
+def ziegler_nichols_openloop(type, kp, tau, tm):
   if type == 'P':
-    return T/L, 10e20, 0
+    return tm/tau, 10e20, 0
   elif type == 'PI':
-    return 0.9*T/L, L/0.3, 0
+    return 0.9*tm/tau, tau/0.3, 0
   elif type == 'PID':
-    return 1.2*T/L, 2*L, 0.5*L
+    return (1.2*tau/(kp*tm), 2*tau/(kp*tm)), 2*tm, 0.5*tm 
 
 def ziegler_nichols_closedloop(type, Kcr, Pcr):
   if type == 'P':

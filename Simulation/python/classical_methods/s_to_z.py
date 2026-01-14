@@ -7,7 +7,10 @@ def s_z_domain(Kp_cont, Ti_cont, Td_cont, Ts):
     if Ti_cont == 0:
         Ki_z = 0.0 # No integral action
     else:
-        Ki_z = Kp_cont * (Ts / 2)
+        if type(Kp_cont) == float:
+            Ki_z = Kp_cont * (Ts / 2)
+        else:
+            Ki_z = (Kp_cont[0]+Kp_cont[1]) * (Ts / 2) / 2
 
     # 3. Derivative Term (K_D = K_P * T_D)
     # The derivative gain constant (Kd_z) is K_P * (T_D / Ts)
