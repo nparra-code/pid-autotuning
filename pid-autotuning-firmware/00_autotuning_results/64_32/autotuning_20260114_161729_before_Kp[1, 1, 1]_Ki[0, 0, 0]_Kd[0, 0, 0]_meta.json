@@ -1,0 +1,27 @@
+{
+  "session_id": "20260114_161729_before",
+  "start_time": "2026-01-14T16:17:54.502590",
+  "end_time": "2026-01-14T16:17:54.840798",
+  "duration_seconds": 0.338211,
+  "protocol_version": 1,
+  "total_samples": 12400,
+  "csv_file": "autotuning_20260114_161729_before_Kp[1, 1, 1]_Ki[0, 0, 0]_Kd[0, 0, 0].csv",
+  "raw_file": "autotuning_20260114_161729_before_Kp[1, 1, 1]_Ki[0, 0, 0]_Kd[0, 0, 0]_raw.bin",
+  "pid_constants": [
+    [
+      1,
+      1,
+      1
+    ],
+    [
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0
+    ]
+  ]
+}
