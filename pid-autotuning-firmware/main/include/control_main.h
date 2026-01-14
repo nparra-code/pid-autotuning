@@ -63,17 +63,17 @@
 ///<--------------------------------------------------
 
 ///<-------------- PID configuration -----------------
-#define PID_KP_R 1 // Proportional gain for right motor
-#define PID_KI_R 0.0 // Integral gain for right motor
-#define PID_KD_R 0.0 // Derivative gain for right motor
+#define PID_KP_R 2.4658 // Proportional gain for right motor
+#define PID_KI_R 0.0019 // Integral gain for right motor
+#define PID_KD_R 0.0019 // Derivative gain for right motor
 
-#define PID_KP_L 1 // Proportional gain for left motor
-#define PID_KI_L 0.0 // Integral gain for left motor
-#define PID_KD_L 0.0 // Derivative gain for left motor
+#define PID_KP_L 2.6909 // Proportional gain for left motor
+#define PID_KI_L 0.0033 // Integral gain for left motor
+#define PID_KD_L 0.0021 // Derivative gain for left motor
 
-#define PID_KP_B 1 // Proportional gain for back motor
-#define PID_KI_B 0.0 // Integral gain for back motor
-#define PID_KD_B 0.0 // Derivative gain for back motor
+#define PID_KP_B 2.8562 // Proportional gain for back motor
+#define PID_KI_B 0.0023 // Integral gain for back motor
+#define PID_KD_B 0.0034 // Derivative gain for back motor
 
 #define EULER 2.71828
 #define PI 3.14159
