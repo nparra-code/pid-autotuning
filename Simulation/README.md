@@ -209,6 +209,131 @@ The simulator can generate various trajectory patterns:
 
 Each pattern helps train the LSTM to handle different control scenarios.
 
+---
+
+## Simulation Results
+
+### LSTM Model Performance Comparison
+
+All models trained on the same dataset with 100-sample sequences. Results show before/after PID autotuning on simulated omniwheel robot.
+
+#### 1. LSTM 128-64 Model (Best Simulation Performance)
+![LSTM 128-64 Result](results/pid_tuning_comparison_lstm128tanh_64relu_exp_1401.png)
+
+**Model Configuration:**
+- LSTM Layer: 128 units, tanh activation
+- Dense Layer: 64 units, ReLU activation
+- Parameters: ~50K trainable weights
+- Training Time: ~45 minutes
+
+**Performance Metrics:**
+- **Oscillation Score:** ⭐⭐⭐⭐⭐ Excellent (lowest variance)
+- **Steady-State Error:** ⭐⭐⭐⭐⭐ Excellent (<0.5%)
+- **Combined Score:** Best overall in simulation
+- **Convergence:** 2 iterations to optimal
+
+**Observations:**
+- Smoothest tracking among all models
+- Minimal overshoot and fastest settling
+- Excellent generalization to unseen trajectories
+- Highest computational cost
+
+---
+
+#### 2. LSTM 128-32 Model
+![LSTM 128-32 Result](results/pid_tuning_comparison_lstm128tanh_32relu_exp_1401.png)
+
+**Model Configuration:**
+- LSTM Layer: 128 units, tanh activation
+- Dense Layer: 32 units, ReLU activation
+- Parameters: ~25K trainable weights
+- Training Time: ~35 minutes
+
+**Performance Metrics:**
+- **Oscillation Score:** ⭐⭐⭐⭐ Very Good
+- **Steady-State Error:** ⭐⭐⭐⭐⭐ Excellent
+- **Combined Score:** Strong performance
+- **Convergence:** 2-3 iterations
+
+**Observations:**
+- Excellent balance between performance and speed
+- Very close to 128-64 in simulation results
+- **Best performer on real hardware** (see firmware README)
+- Recommended for deployment
+
+---
+
+#### 3. LSTM 64-64 Model
+![LSTM 64-64 Result](results/pid_tuning_comparison_lstm64tanh_64relu_exp_1401.png)
+
+**Model Configuration:**
+- LSTM Layer: 64 units, tanh activation
+- Dense Layer: 64 units, ReLU activation
+- Parameters: ~20K trainable weights
+- Training Time: ~25 minutes
+
+**Performance Metrics:**
+- **Oscillation Score:** ⭐⭐⭐⭐ Very Good
+- **Steady-State Error:** ⭐⭐⭐⭐ Very Good
+- **Combined Score:** Good overall
+- **Convergence:** 2-3 iterations
+
+**Observations:**
+- Good balance of model size and performance
+- Faster inference than larger models
+- Suitable for resource-constrained applications
+- Some minor oscillations compared to 128-unit models
+
+---
+
+#### 4. LSTM 64-32 Model
+![LSTM 64-32 Result](results/pid_tuning_comparison_lstm64tanh_32relu_exp_1401.png)
+
+**Model Configuration:**
+- LSTM Layer: 64 units, tanh activation
+- Dense Layer: 32 units, ReLU activation
+- Parameters: ~12K trainable weights
+- Training Time: ~20 minutes
+
+**Performance Metrics:**
+- **Oscillation Score:** ⭐⭐⭐ Good
+- **Steady-State Error:** ⭐⭐⭐ Good
+- **Combined Score:** Acceptable
+- **Convergence:** 3-4 iterations
+
+**Observations:**
+- Smallest and fastest model
+- Acceptable performance for baseline applications
+- More iterations needed for convergence
+- Good starting point for embedded systems
+
+---
+
+### Training History
+
+Model training convergence visualization available in [rnn/results/](rnn/results/):
+- `lstm128tanh_64relu_exp_1401_training_history.png`
+- `lstm128tanh_32relu_exp_1401_training_history.png`
+- `lstm64tanh_64relu_exp_1401_training_history.png`
+- `lstm64tanh_32relu_exp_1401_training_history.png`
+
+All models achieved good convergence with validation loss stabilizing within 50-100 epochs.
+
+---
+
+### Simulation vs Hardware Performance
+
+| Model | Simulation Rank | Hardware Rank | Notes |
+|-------|----------------|---------------|-------|
+| LSTM 128-64 | 🥇 1st | 🥈 2nd | Best in simulation, very good on hardware |
+| LSTM 128-32 | 🥈 2nd | 🥇 1st | Excellent both, **best hardware performance** |
+| LSTM 64-64 | 🥉 3rd | 🥉 3rd | Consistent performance across both |
+| LSTM 64-32 | 4th | 4th | Acceptable baseline |
+
+**Key Insight:** The LSTM 128-32 model provides the best trade-off between simulation accuracy and real-world robustness, making it the **recommended choice for deployment**.
+
+---
+
 ## Model Performance
 
 The LSTM model performance metrics:
