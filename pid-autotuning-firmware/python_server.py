@@ -1,7 +1,23 @@
 #!/usr/bin/env python3
 """
-PID Autotuner Server
-Receives robot telemetry data, runs RNN inference, returns PID constants
+@file python_server.py
+@brief PID Autotuner Server with RNN Inference
+@details Receives robot telemetry data from ESP32, performs RNN-based PID inference,
+         and returns optimized PID constants. Includes performance evaluation,
+         visualization, and data logging capabilities.
+         
+@features
+    - Real-time telemetry data reception via TCP sockets
+    - LSTM RNN model inference for PID parameter prediction  
+    - Performance evaluation (oscillation and steady-state error metrics)
+    - Before/after comparison visualizations
+    - Trajectory reconstruction from wheel velocities
+    - Data logging to CSV format
+    - CRC32 checksum validation
+    
+@author Nelson Fernando Parra Guardia
+@date January 2026
+@version 1.0
 """
 
 import socket
@@ -138,16 +154,21 @@ def evaluate_pid_performance(samples: np.ndarray, weight_oscillation=0.6, weight
 
 def calculate_robot_trajectory(samples, wheel_radius=0.03, use_setpoint=False):
     """
-    Calculate robot trajectory using 3-wheel omni kinematics
+    @brief Calculate robot trajectory using 3-wheel omni kinematics
+    @details Applies forward kinematics to reconstruct robot path from wheel velocities.
+             Supports both actual states and reference setpoints for comparison.
     
-    Args:
-        samples: numpy array with shape (n_samples, 16) containing
-                 [timestamp, motor_state[3], motor_setpoint[3], errors[3][3]]
-        wheel_radius: Wheel radius in meters (default 3cm = 0.03m)
-        use_setpoint: If True, use setpoints; if False, use actual states
+    @param samples Numpy array of shape (n_samples, 16) containing:
+                   [timestamp, motor_state[3], motor_setpoint[3], errors[3][3]]
+    @param wheel_radius Wheel radius in meters (default: 0.03m = 3cm)
+    @param use_setpoint If True, uses setpoints; if False, uses actual states
     
-    Returns:
-        x, y, theta: Robot position and orientation arrays
+    @return Tuple (x, y, theta) containing:
+            - x: X-position trajectory array (m)
+            - y: Y-position trajectory array (m)
+            - theta: Orientation angle trajectory array (rad)
+    
+    @note Assumes 120-degree wheel spacing in omni configuration
     """
     r = wheel_radius
     wheel_angles = np.array([0, 2*np.pi/3, 4*np.pi/3])  # 0°, 120°, 240°
@@ -196,14 +217,22 @@ def calculate_robot_trajectory(samples, wheel_radius=0.03, use_setpoint=False):
 
 def plot_comparison_graphs(samples_before, samples_after, pid_before, pid_after, timestamp):
     """
-    Generate comparison plots for before/after PID tuning
+    @brief Generate comprehensive comparison plots for PID tuning evaluation
+    @details Creates multi-panel visualization showing:
+             - Motor tracking performance (3 motors)
+             - Robot trajectory comparison
+             - Error metrics and statistics
+             - Before vs After side-by-side comparison
     
-    Args:
-        samples_before: numpy array of samples before tuning
-        samples_after: numpy array of samples after tuning
-        pid_before: tuple of (Kp, Ki, Kd) before tuning
-        pid_after: tuple of (Kp, Ki, Kd) after tuning
-        timestamp: timestamp string for filename
+    @param samples_before Numpy array of samples before tuning (N, 16)
+    @param samples_after Numpy array of samples after tuning (N, 16)
+    @param pid_before Tuple of numpy arrays (Kp[3], Ki[3], Kd[3]) before tuning
+    @param pid_after Tuple of numpy arrays (Kp[3], Ki[3], Kd[3]) after tuning
+    @param timestamp Timestamp string for filename generation
+    
+    @return Filename of the saved comparison plot
+    
+    @note Saves plot to PLOT_DIR directory with high DPI (150)
     """
     logger.info("Generating comparison visualization...")
     

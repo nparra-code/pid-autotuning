@@ -1,8 +1,23 @@
 #!/usr/bin/env python3
 """
-Motor Identification Server
-Receives PWM input and motor velocity response data for system identification
-Analyzes dead time, transient time, and step response characteristics
+@file motor_ident_server.py
+@brief Motor System Identification Server
+@details Receives PWM input and motor velocity response data from ESP32 for
+         system identification purposes. Analyzes step responses to extract
+         motor parameters: dead time, time constants, gain, settling time.
+         
+@features
+    - Real-time step response data collection
+    - Automated step change detection
+    - Dead time and rise time calculation
+    - Settling time and overshoot analysis
+    - Process gain estimation
+    - Visualization of step responses
+    - CSV data logging with analysis results
+    
+@author Nelson Fernando Parra Guardia
+@date January 2026
+@version 1.0
 """
 
 import socket
@@ -47,7 +62,21 @@ RISE_TIME_HIGH = 0.90     # 90% of final value
 
 
 class MotorIdentAnalyzer:
-    """Analyzes motor identification data to extract system parameters"""
+    """
+    @brief Analyzes motor identification data to extract system parameters
+    @details Processes step response data to identify first-order system parameters
+             including dead time (Td), time constant (tau), process gain (Kp),
+             rise time, settling time, and overshoot
+    
+    @attributes
+        samples: List of (timestamp_ms, pwm_input, velocity_response) tuples
+        sample_time_ms: Sample period in milliseconds
+        sample_time_s: Sample period in seconds
+        timestamps: Numpy array of timestamps
+        pwm_inputs: Numpy array of PWM commands
+        velocities: Numpy array of velocity measurements
+        time_s: Time vector in seconds from start
+    """
     
     def __init__(self, samples: List[Tuple], sample_time_ms: float = 2.0):
         """

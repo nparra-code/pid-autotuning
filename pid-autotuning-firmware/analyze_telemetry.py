@@ -1,7 +1,25 @@
 #!/usr/bin/env python3
 """
-Telemetry Data Analysis Script
-Analyzes and visualizes logged telemetry data
+@file analyze_telemetry.py
+@brief Telemetry Data Analysis and Visualization Tool
+@details Loads logged telemetry data from CSV files and generates comprehensive
+         visualizations for performance analysis, including motor tracking plots,
+         error analysis, trajectory visualization, and PID performance metrics.
+         
+@features
+    - CSV data loading with session metadata
+    - Individual motor tracking plots
+    - PID error history visualization
+    - Combined motor performance comparison
+    - Statistical performance metrics
+    - Export to high-resolution images
+    
+@usage
+    python analyze_telemetry.py <path_to_csv_file>
+    
+@author Nelson Fernando Parra Guardia
+@date January 2026
+@version 1.0
 """
 
 import pandas as pd
@@ -13,21 +31,43 @@ from pathlib import Path
 import json
 
 def load_session_data(csv_path):
-    """Load telemetry data from CSV file"""
+    """
+    @brief Load telemetry data from CSV file
+    @details Reads CSV file containing logged telemetry samples
+    
+    @param csv_path Path to telemetry CSV file
+    
+    @return Pandas DataFrame containing telemetry data
+    """
     print(f"Loading data from: {csv_path}")
     df = pd.read_csv(csv_path)
     print(f"Loaded {len(df)} samples")
     return df
 
 def load_metadata(meta_path):
-    """Load session metadata"""
+    """
+    @brief Load session metadata from JSON file
+    @details Reads metadata file containing session information
+    
+    @param meta_path Path to metadata JSON file
+    
+    @return Dictionary containing session metadata, or None if file doesn't exist
+    """
     if os.path.exists(meta_path):
         with open(meta_path, 'r') as f:
             return json.load(f)
     return None
 
 def plot_individual_motor_tracking(df, output_dir=None):
-    """Plot individual motor tracking: state vs setpoint for each wheel"""
+    """
+    @brief Plot individual motor tracking performance
+    @details Creates 3-panel plot showing actual vs setpoint tracking for each motor
+    
+    @param df Pandas DataFrame containing telemetry data
+    @param output_dir Optional directory to save plot (default: None shows plot)
+    
+    @note Includes error region shading between actual and setpoint
+    """
     fig, axes = plt.subplots(3, 1, figsize=(14, 10))
     
     motor_names = ['Right Wheel (Motor 0)', 'Left Wheel (Motor 1)', 'Back Wheel (Motor 2)']

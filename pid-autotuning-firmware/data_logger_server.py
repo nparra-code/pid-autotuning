@@ -1,7 +1,20 @@
 #!/usr/bin/env python3
 """
-Data Logger Server
-Receives robot telemetry data and logs it to local files
+@file data_logger_server.py
+@brief Telemetry Data Logging Server
+@details Receives robot telemetry data from ESP32 via TCP sockets and logs it to
+         multiple file formats (CSV, binary, JSON metadata) for post-analysis.
+         
+@features
+    - Real-time telemetry data reception
+    - Multi-format logging (CSV for analysis, binary for raw data)
+    - Session metadata tracking
+    - CRC32 data validation
+    - Statistics and error tracking
+    
+@author Nelson Fernando Parra Guardia
+@date January 2026
+@version 1.0
 """
 
 import socket
@@ -77,7 +90,21 @@ Kds = [PID_KD_R, PID_KD_L, PID_KD_B]
 
 
 class DataLogger:
-    """Handles logging of telemetry data to files"""
+    """
+    @brief Handles logging of telemetry data to multiple file formats
+    @details Manages session-based logging with automatic file creation,
+             CSV formatting, binary backup, and metadata generation
+    
+    @attributes
+        log_dir: Directory path for log files
+        session_start: Session start timestamp
+        session_id: Unique session identifier (YYYYmmdd_HHMMSS)
+        csv_path: Path to CSV output file
+        raw_path: Path to binary raw data file
+        meta_path: Path to JSON metadata file
+        total_samples: Count of samples logged
+        total_batches: Count of batches received
+    """
     
     def __init__(self, log_dir: str = LOG_DIR):
         self.log_dir = log_dir

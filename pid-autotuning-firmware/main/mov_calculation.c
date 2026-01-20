@@ -1,8 +1,31 @@
+/**
+ * @file mov_calculation.c
+ * @brief Movement kinematics calculations for omniwheel robot
+ * @details Implements inverse kinematics transformations to convert desired
+ *          robot velocities to individual wheel velocities for a 3-wheel
+ *          omniwheel configuration with 30° orientation angle
+ * 
+ * @author Nelson Fernando Parra Guardia
+ * @date January 2026
+ * @version 1.0
+ */
+
 #include "mov_calculation.h"
 
 // Global flag for resetting movement sequence
 bool g_reset_movements_flag = false;
 
+/**
+ * @brief Calculate velocity components for linear motion
+ * @details Decomposes desired linear motion into x and y velocity components
+ *          based on direction and angle
+ * 
+ * @param forward True for forward motion, false for reverse
+ * @param linear_velocity Desired linear speed in cm/s
+ * @param angle Direction angle in degrees (0° = forward, 90° = right)
+ * @param x_velocity Output pointer for x-component velocity (cm/s)
+ * @param y_velocity Output pointer for y-component velocity (cm/s)
+ */
 void linear_movement(bool forward, float linear_velocity, float angle, float *x_velocity, float *y_velocity) {
     if (forward) {
         *x_velocity = -linear_velocity * sinf(angle * PI / 180.0f);
@@ -13,6 +36,21 @@ void linear_movement(bool forward, float linear_velocity, float angle, float *x_
     }
 }
 
+/**
+ * @brief Calculate velocity components for circular motion
+ * @details Generates tangential velocities for following a circular arc.
+ *          Uses parametric equations with time-varying angular position.
+ * 
+ * @param cw True for clockwise rotation, false for counter-clockwise
+ * @param linear_velocity Tangential speed along circle (cm/s)
+ * @param angle Total angle to traverse in degrees
+ * @param radius Radius of circular path (cm)
+ * @param x_velocity Output pointer for x-component velocity (cm/s)
+ * @param y_velocity Output pointer for y-component velocity (cm/s)
+ * 
+ * @note Uses static time variable that increments at SAMPLE_TIME rate
+ * @note Automatically resets when motion completes
+ */
 void circular_movement(bool cw, float linear_velocity, float angle, float radius, float *x_velocity, float *y_velocity) {
     static float t = 0;
 
@@ -37,6 +75,20 @@ void circular_movement(bool cw, float linear_velocity, float angle, float radius
     }
 }
 
+/**
+ * @brief Convert linear velocities to wheel angular velocity
+ * @details Applies inverse kinematics transformation for 3-wheel omniwheel
+ *          configuration. Accounts for wheel orientation angle (DELTA) and
+ *          gear ratio (N/R).
+ * 
+ * @param x_velocity Body-frame x velocity component (cm/s)
+ * @param y_velocity Body-frame y velocity component (cm/s)
+ * @param vel_selection Wheel selector: 0=left, 1=back, 2=right
+ * @param wheel_velocity Output pointer for wheel angular velocity (cm/s)
+ * 
+ * @note Includes scaling factor of 1/5 for motor characteristics
+ * @note Uses DELTA=π/6 (30°) for wheel orientation
+ */
 void cal_lin_to_ang_velocity(float x_velocity, float y_velocity, uint8_t vel_selection, float *wheel_velocity) {
 
     float scale = N / R;
@@ -62,12 +114,34 @@ void cal_lin_to_ang_velocity(float x_velocity, float y_velocity, uint8_t vel_sel
     }
 }
 
+/**
+ * @brief Reset movement sequence to initial state
+ * @details Sets global flag to restart movement sequence from beginning.
+ *          Clears all static variables in multiple_movements().
+ */
 void reset_movements(void) {
     // External reset flag that will be checked by multiple_movements
     extern bool g_reset_movements_flag;
     g_reset_movements_flag = true;
 }
 
+/**
+ * @brief Execute a sequence of movements
+ * @details State machine that steps through an array of movement commands,
+ *          generating appropriate velocity outputs for each phase. Handles
+ *          timing, transitions, and completion detection.
+ * 
+ * @param movements Pointer to array of Movement structures
+ * @param movement_count Number of movements in array
+ * @param x_velocity Output pointer for current x velocity (cm/s)
+ * @param y_velocity Output pointer for current y velocity (cm/s)
+ * 
+ * @return true when all movements completed, false during execution
+ * 
+ * @note Uses static variables for state persistence across calls
+ * @note Call rate should match SAMPLE_TIME for accurate timing
+ * @note Responds to g_reset_movements_flag for external reset
+ */
 bool multiple_movements(Movement *movements, uint8_t movement_count, float *x_velocity, float *y_velocity)
 {
     static float g_time = 0.0f;

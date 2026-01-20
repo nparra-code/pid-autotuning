@@ -1,3 +1,15 @@
+/**
+ * @file telemetry.c
+ * @brief Telemetry communication module for robot data transmission
+ * @details Implements TCP/IP socket communication for sending robot telemetry
+ *          data and receiving PID tuning parameters from external inference server.
+ *          Supports both regular telemetry and motor identification modes.
+ * 
+ * @author Nelson Fernando Parra Guardia
+ * @date January 2026
+ * @version 1.0
+ */
+
 #include "telemetry.h"
 
 static const char *TAG = "TELEMETRY";
@@ -50,6 +62,14 @@ static uint32_t calculate_crc32(const uint8_t *data, size_t len) {
     return ~crc;
 }
 
+/**
+ * @brief Initialize telemetry system
+ * @details Creates mutex for thread safety and stores server IP address
+ * 
+ * @param server_ip IP address of telemetry server (null-terminated string)
+ * 
+ * @return ESP_OK on success, ESP_FAIL if mutex creation fails
+ */
 // Initialize telemetry system
 esp_err_t telemetry_init(const char *server_ip) {
     if (g_telem.mutex == NULL) {
@@ -67,6 +87,17 @@ esp_err_t telemetry_init(const char *server_ip) {
     return ESP_OK;
 }
 
+/**
+ * @brief Connect to telemetry server
+ * @details Establishes TCP connection to server on port TELEMETRY_SERVER_PORT.
+ *          Sets socket timeouts and validates connection.
+ * 
+ * @return ESP_OK on successful connection
+ * @return ESP_FAIL if socket creation or connection fails
+ * 
+ * @note Thread-safe (uses mutex)
+ * @note Sets socket receive/send timeouts to TELEMETRY_TIMEOUT_MS
+ */
 // Connect to server
 esp_err_t telemetry_connect(void) {
     xSemaphoreTake(g_telem.mutex, portMAX_DELAY);
@@ -191,6 +222,23 @@ esp_err_t telemetry_disconnect(void) {
     return ESP_OK;
 }
 
+/**
+ * @brief Add a telemetry sample to the current batch
+ * @details Buffers samples until TELEMETRY_SAMPLE_WINDOW is reached,
+ *          then automatically sends batch to server
+ * 
+ * @param sample Pointer to robot_sample_t structure containing:
+ *               - timestamp_ms: Timestamp in milliseconds
+ *               - motor_state[3]: Current motor velocities
+ *               - motor_setpoint[3]: Reference velocities
+ *               - errors[3][3]: Error history for PID control
+ * 
+ * @return ESP_OK if sample added successfully
+ * @return ESP_ERR_INVALID_ARG if sample is NULL
+ * 
+ * @note Thread-safe (uses mutex)
+ * @note Automatically sends batch when buffer is full
+ */
 // Add a sample to the batch
 esp_err_t telemetry_add_sample(const robot_sample_t *sample) {
     if (sample == NULL) {

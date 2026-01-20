@@ -1,3 +1,14 @@
+/**
+ * @file control_main.c
+ * @brief PID control tasks for omniwheel robot motors
+ * @details Implements encoder reading, PID control loops, and distance tracking
+ *          for a three-wheel omniwheel robot configuration
+ * 
+ * @author Nelson Fernando Parra Guardia
+ * @date January 2026
+ * @version 1.0
+ */
+
 #include "control_main.h"
 
 // Global flag to track if all control tasks have completed their movements
@@ -82,6 +93,18 @@ enum movements_num movement = LINEAR; ///< Movement type
 float x_vel = .0f, y_vel = .0f; ///< Generalized velocities for the robot
 float goal_time = 2.0f; ///< Goal time for linear movement in seconds
 
+/**
+ * @brief FreeRTOS task for reading encoder data from all three wheels
+ * @details Continuously reads AS5600 magnetic encoders and estimates wheel velocities
+ *          using sensor fusion techniques. Runs at SAMPLE_TIME intervals.
+ * 
+ * @param pvParameters Pointer to encoder_params_t structure containing:
+ *                     - Pointers to AS5600 sensor structures for all wheels
+ *                     - Pointers to encoder data structures for velocity storage
+ * 
+ * @note Requires ADC to be calibrated before proceeding
+ * @note Protected by mutex for ADC access
+ */
 void vTaskEncoders(void *pvParameters)
 {
     encoder_params_t *params = (encoder_params_t *)pvParameters; ///< Control parameters structure
@@ -130,6 +153,21 @@ void vTaskEncoders(void *pvParameters)
     }
 }
 
+/**
+ * @brief FreeRTOS task for PID velocity control of a single motor
+ * @details Implements discrete-time PID controller with low-pass filtering.
+ *          Tracks reference velocities from movement planner and applies
+ *          control output to BLDC motor via PWM.
+ * 
+ * @param pvParameters Pointer to control_params_t structure containing:
+ *                     - Encoder data for feedback
+ *                     - PID block handle
+ *                     - PWM motor handle
+ *                     - Movement and velocity selection parameters
+ * 
+ * @note Runs at SAMPLE_TIME intervals (typically 1-10ms)
+ * @note Uses low-pass filter with 10Hz cutoff for velocity measurement
+ */
 // Task to control the wheel
 void vTaskControl( void * pvParameters ){
 

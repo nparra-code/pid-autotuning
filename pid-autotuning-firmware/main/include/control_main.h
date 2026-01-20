@@ -1,3 +1,14 @@
+/**
+ * @file control_main.h
+ * @brief Header file for omniwheel robot control system
+ * @details Defines structures, constants, and function prototypes for
+ *          encoder reading, PID control, and motor actuation tasks
+ * 
+ * @author Nelson Fernando Parra Guardia
+ * @date January 2026
+ * @version 1.0
+ */
+
 #ifndef CONTROL_H
 #define CONTROL_H
 
@@ -79,30 +90,46 @@
 #define PI 3.14159
 ///<--------------------------------------------------
 
+/**
+ * @brief Control parameters structure for individual motor control task
+ * @details Contains all necessary pointers and configuration for a single
+ *          motor's control loop including sensor data, PID controller,
+ *          and PWM output
+ */
 typedef struct {
-    AS5600_t * gStruct;             ///< Velocity estimation from encoder in cm/s
-    encoder_data_t * sensor_data;   ///< Velocity estimation from IMU in cm/s
-    pid_block_handle_t * pid_block; ///< Velocity estimation from Lidar in cm/s
-    bldc_pwm_motor_t * pwm_motor;   ///< BLDC motor object
+    AS5600_t * gStruct;             ///< AS5600 magnetic encoder interface
+    encoder_data_t * sensor_data;   ///< Encoder velocity and position data
+    pid_block_handle_t * pid_block; ///< PID controller instance
+    bldc_pwm_motor_t * pwm_motor;   ///< BLDC PWM motor driver interface
 
-    uint8_t predef_move;            ///< Predefined movements for the robot
-    uint8_t vel_selection;          ///< Velocity selection for the robot
+    uint8_t predef_move;            ///< Predefined movement selection index
+    uint8_t vel_selection;          ///< Wheel identification (0=left, 1=back, 2=right)
 } control_params_t;
 
+/**
+ * @brief Encoder parameters structure for all three wheels
+ * @details Groups AS5600 sensor interfaces and encoder data for the
+ *          vTaskEncoders function to read all wheels simultaneously
+ */
 typedef struct {
-    AS5600_t * right_gStruct;             ///< Velocity estimation from right encoder in cm/s
-    AS5600_t * left_gStruct;              ///< Velocity estimation from left encoder in cm/s
-    AS5600_t * back_gStruct;              ///< Velocity estimation from back encoder in cm/s
-    encoder_data_t * right_sensor_data;   ///< Encoder data structure for right wheel
-    encoder_data_t * left_sensor_data;    ///< Encoder data structure for left wheel
-    encoder_data_t * back_sensor_data;    ///< Encoder data structure for back wheel
+    AS5600_t * right_gStruct;             ///< Right wheel AS5600 encoder interface
+    AS5600_t * left_gStruct;              ///< Left wheel AS5600 encoder interface
+    AS5600_t * back_gStruct;              ///< Back wheel AS5600 encoder interface
+    encoder_data_t * right_sensor_data;   ///< Right wheel velocity/position data
+    encoder_data_t * left_sensor_data;    ///< Left wheel velocity/position data
+    encoder_data_t * back_sensor_data;    ///< Back wheel velocity/position data
 } encoder_params_t;
 
+/**
+ * @brief Distance tracking parameters structure
+ * @details Used by vTaskDistance to monitor accumulated travel distance
+ *          from all three wheels
+ */
 typedef struct {
-    float target_distance; ///< Distance measurement
-    encoder_data_t * encoder_data_right; ///< Encoder data structure for right wheel
-    encoder_data_t * encoder_data_left;  ///< Encoder data structure for left wheel
-    encoder_data_t * encoder_data_back;  ///< Encoder data structure for back wheel
+    float target_distance; ///< Target distance to travel (cm)
+    encoder_data_t * encoder_data_right; ///< Right wheel encoder data
+    encoder_data_t * encoder_data_left;  ///< Left wheel encoder data
+    encoder_data_t * encoder_data_back;  ///< Back wheel encoder data
 
 } distance_params_t;
 
