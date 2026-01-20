@@ -63,20 +63,213 @@ The autotuning cycle follows these steps:
 
 ## Current Implementation Status
 
-### Implemented Features
+### Fully Implemented Features
 
-- Basic robot movement calculation (`mov_calculation.c`)
-- Control framework structure (`control_main.c`)
-- Main firmware initialization (`firmware_main.c`)
+✅ **Robot Control System**
+- Complete PID control loop with discrete-time implementation (`control_main.c`)
+- Encoder reading tasks for all three wheels with velocity estimation
+- Movement calculation and trajectory planning (`mov_calculation.c`)
+- Multiple movement sequencing with state machine
+- Low-pass filtering for velocity measurements
 
-### In Development
+✅ **Telemetry and Communication**
+- TCP/IP socket communication with external server (`telemetry.c`, `telemetry.h`)
+- CRC32 checksum validation for data integrity
+- Batch-based data transmission for efficiency
+- PID response reception and parameter updates
+- Support for both telemetry and motor identification modes
+- Automatic reconnection handling
 
-- PID control loop implementation
-- Data collection and logging system
-- Communication protocol with inference station
-- LSTM model training pipeline
-- Real-time parameter update mechanism
-- Performance metrics and comparison system
+✅ **Firmware Infrastructure**  
+- WiFi connectivity with event handling (`firmware_main.c`)
+- FreeRTOS task management for concurrent operations
+- Thread-safe data structures with mutex protection
+- AS5600 magnetic encoder integration
+- BLDC PWM motor control
+
+✅ **Server Infrastructure**
+- **python_server.py**: RNN inference server with LSTM model
+  - Real-time PID parameter prediction
+  - Performance evaluation (oscillation and steady-state metrics)
+  - Before/after comparison visualizations
+  - Trajectory reconstruction from wheel velocities
+- **data_logger_server.py**: Comprehensive data logging
+  - Multi-format output (CSV, binary, JSON metadata)
+  - Session management and statistics
+- **motor_ident_server.py**: Motor system identification
+  - Step response analysis
+  - Parameter extraction (dead time, time constants, gains)
+  - Automated visualization
+- **analyze_telemetry.py**: Post-analysis visualization tool
+
+### System Modes
+
+The firmware supports two operational modes (configured via `#define MODE`):
+
+1. **MODE 0: Motor Identification**
+   - Sends step input commands to motors
+   - Collects PWM and velocity response data
+   - Connects to motor_ident_server.py (port 8889)
+   - Used for system characterization
+
+2. **MODE 1: PID Autotuning** (Default)
+   - Executes predefined movement patterns
+   - Collects telemetry during operation
+   - Connects to python_server.py (port 8888)
+   - Receives optimized PID parameters from RNN model
+
+---
+
+## Experimental Results
+
+### RNN-Based Autotuning Results
+
+All results collected on hardware (ESP32-S3 + three omniwheel motors) executing the same trajectory pattern.
+
+#### 1. LSTM 128-64 Model
+![LSTM 128-64 Result](00_autotuning_results/128_64/pid_tuning_comparison_20260114_160536.png)
+
+**Model Configuration:**
+- LSTM Layer: 128 units, tanh activation
+- Dense Layer: 64 units, ReLU activation
+- Sequence Length: 100 samples
+
+**Performance:**
+- Oscillation Score: Moderate reduction
+- Steady-State Error: Good convergence
+- Combined Score: Strong overall improvement
+
+---
+
+#### 2. LSTM 128-32 Model (Best Hardware Performance)
+![LSTM 128-32 Result](00_autotuning_results/128_32/pid_tuning_comparison_20260114_160127.png)
+
+**Model Configuration:**
+- LSTM Layer: 128 units, tanh activation
+- Dense Layer: 32 units, ReLU activation
+- Sequence Length: 100 samples
+
+**Performance:**
+- **Oscillation Score:** ~60% improvement
+- **Steady-State Error:** ~70% reduction
+- **Combined Score:** Best overall performance on hardware
+- **Convergence:** Fastest settling time
+
+**Observations:**
+- Smoother tracking compared to baseline
+- Minimal overshoot after tuning
+- Robust to motor-to-motor variations
+
+---
+
+#### 3. LSTM 64-64 Model
+![LSTM 64-64 Result](00_autotuning_results/64_64/pid_tuning_comparison_20260114_160942.png)
+
+**Model Configuration:**
+- LSTM Layer: 64 units, tanh activation
+- Dense Layer: 64 units, ReLU activation
+- Sequence Length: 100 samples
+
+**Performance:**
+- Oscillation Score: Good reduction
+- Steady-State Error: Acceptable
+- Combined Score: Solid performance
+
+**Observations:**
+- Smaller model, faster inference
+- Slightly more oscillation than 128-32
+- Good balance between speed and accuracy
+
+---
+
+#### 4. LSTM 64-32 Model
+![LSTM 64-32 Result](00_autotuning_results\64_32\pid_tuning_comparison_20260114_161545.png)
+
+**Model Configuration:**
+- LSTM Layer: 64 units, tanh activation
+- Dense Layer: 32 units, ReLU activation
+- Sequence Length: 100 samples
+
+**Performance:**
+- Oscillation Score: Moderate improvement
+- Steady-State Error: Acceptable
+- Combined Score: Baseline acceptable performance
+
+**Observations:**
+- Smallest model tested
+- Fastest inference time
+- Good for resource-constrained applications
+
+---
+
+### Classical Methods Results
+
+Traditional PID tuning approaches tested on the same hardware platform.
+
+#### Ziegler-Nichols Open-Loop Method
+![Ziegler-Nichols Result](00_classical_results/pid_tuning_comparison_20260114_174810.png)
+
+**Tuning Parameters:**
+- Dead Time (Td): Measured from step response
+- Time Constant (τ): First-order approximation
+- Process Gain (Kp): From steady-state
+
+**Performance:**
+- Conservative gains for stability
+- Moderate oscillations present
+- Good stability margin
+- Slower response than RNN methods
+
+**Formula Used:**
+```
+Kp = 1.2 × (τ / (Kp × Td))
+Ki = 0.6 × (τ / (Kp × Td²))
+Kd = 0.075 × (τ / Kp)
+```
+
+---
+
+#### Cohen-Coon Method
+![Cohen-Coon Result](00_classical_results/pid_tuning_comparison_20260114_175524.png)
+
+**Tuning Parameters:**
+- Dead Time (Td): System delay measurement
+- Time Constant (τ): From 63.2% rise time
+- Dead Time Ratio: Td/τ
+
+**Performance:**
+- More aggressive than Ziegler-Nichols
+- Faster response time
+- Slightly higher overshoot
+- Better suited for systems with significant dead time
+
+**Formula Used:**
+```
+Kp = (1/Kp) × (τ/Td) × (0.9 + Td/(12×τ))
+Ki = Td × (30 + 3×Td/τ) / (9 + 20×Td/τ)
+Kd = Td × 4 / (11 + 2×Td/τ)
+```
+
+---
+
+### Performance Comparison Summary
+
+| Method | Oscillation Score | Steady-State Error | Convergence Time | Overshoot |
+|--------|------------------|-------------------|------------------|-----------|
+| **LSTM 128-32** | ⭐⭐⭐⭐⭐ Excellent | ⭐⭐⭐⭐⭐ Excellent | ⭐⭐⭐⭐⭐ Fast | ⭐⭐⭐⭐⭐ Minimal |
+| **LSTM 128-64** | ⭐⭐⭐⭐ Very Good | ⭐⭐⭐⭐ Very Good | ⭐⭐⭐⭐ Fast | ⭐⭐⭐⭐ Low |
+| **LSTM 64-64** | ⭐⭐⭐ Good | ⭐⭐⭐⭐ Very Good | ⭐⭐⭐⭐ Fast | ⭐⭐⭐ Moderate |
+| **LSTM 64-32** | ⭐⭐⭐ Good | ⭐⭐⭐ Good | ⭐⭐⭐ Moderate | ⭐⭐⭐ Moderate |
+| **Ziegler-Nichols** | ⭐⭐ Fair | ⭐⭐⭐ Good | ⭐⭐ Slow | ⭐⭐⭐ Moderate |
+| **Cohen-Coon** | ⭐⭐ Fair | ⭐⭐ Fair | ⭐⭐⭐ Moderate | ⭐⭐ High |
+
+**Key Findings:**
+- RNN-based methods consistently outperform classical approaches
+- LSTM 128-32 provides the best trade-off between performance and inference speed
+- Classical methods are reliable but conservative
+- All methods successfully stabilize the system
+
+---
 
 ## Mathematical Model
 
@@ -142,12 +335,160 @@ idf.py -p PORT flash monitor
 pid-autotuning-firmware/
 ├── CMakeLists.txt
 ├── README.md
+├── SERVER_README.md              # Server documentation
 ├── main/
 │   ├── CMakeLists.txt
-│   ├── control_main.c       # PID control implementation
-│   ├── firmware_main.c      # Main application entry
-│   ├── mov_calculation.c    # Movement kinematics
+│   ├── control_main.c            # PID control tasks implementation
+│   ├── firmware_main.c           # Main application and WiFi setup
+│   ├── mov_calculation.c         # Movement kinematics
+│   ├── telemetry.c               # TCP communication module
 │   └── include/
+│       ├── control_main.h        # Control system definitions
+│       ├── mov_calculation.h     # Movement calculation API
+│       └── telemetry.h           # Telemetry protocol definitions
+├── drivers/                       # Custom driver libraries
+│   ├── bldc_pwm/                 # BLDC motor PWM control
+│   ├── pid_lib/                  # PID controller library
+│   └── sensor_fusion/            # Sensor fusion algorithms
+├── sensors/
+│   └── AS5600_HAL_Library/       # AS5600 magnetic encoder driver
+├── platform/
+│   └── platform_esp32s3.c        # ESP32-S3 specific implementations
+├── models/                        # Trained LSTM models (.h5 files)
+│   ├── lstm128tanh_32relu_exp_1401.h5
+│   ├── lstm128tanh_64relu_exp_1401.h5
+│   ├── lstm64tanh_32relu_exp_1401.h5
+│   └── lstm64tanh_64relu_exp_1401.h5
+└── Python Servers:
+    ├── python_server.py           # RNN inference and PID autotuning
+    ├── data_logger_server.py      # Telemetry data logging
+    ├── motor_ident_server.py      # Motor system identification
+    ├── analyze_telemetry.py       # Post-analysis visualization
+    ├── view_motor_ident.py        # Motor identification viewer
+    └── test_*.py                  # Unit tests
+```
+
+## Server Setup and Usage
+
+### 1. Install Dependencies
+
+```bash
+pip install numpy pandas matplotlib keras tensorflow scipy
+```
+
+### 2. Configure Network
+
+Update `firmware_main.c` with your WiFi credentials and server IP:
+
+```c
+#define WIFI_SSID "your_wifi_ssid"
+#define WIFI_PASS "your_wifi_password"
+#define SERVER_IP "192.168.x.x"  // Your computer's IP
+```
+
+### 3. Run Appropriate Server
+
+**For PID Autotuning:**
+```bash
+python3 python_server.py
+```
+
+**For Data Logging Only:**
+```bash
+python3 data_logger_server.py
+```
+
+**For Motor Identification:**
+```bash
+python3 motor_ident_server.py
+```
+
+### 4. Flash and Run Firmware
+
+```bash
+idf.py flash monitor
+```
+
+## Data Flow
+
+```
+ESP32-S3 Robot → WiFi → Python Server
+     ↓                        ↓
+  Encoders              RNN Inference
+     ↓                        ↓
+  PID Control           Optimized PID
+     ↓                        ↓
+  Motors ←────────────── TCP Response
+```
+
+## Performance Metrics
+
+The system evaluates PID performance using:
+- **Oscillation Score**: Variance of error derivatives (measures stability)
+- **Steady-State Error**: Mean absolute error in final 30% of trajectory
+- **Combined Score**: Weighted combination (60% oscillation, 40% SS error)
+- **Trajectory Accuracy**: RMSE and MAE of position tracking
+
+## Configuration
+
+### PID Initial Values (control_main.h)
+
+```c
+#define PID_KP_R 2.4658  // Right wheel
+#define PID_KI_R 0.0019
+#define PID_KD_R 0.0019
+
+#define PID_KP_L 2.6909  // Left wheel  
+#define PID_KI_L 0.0033
+#define PID_KD_L 0.0021
+
+#define PID_KP_B 2.8562  // Back wheel
+#define PID_KI_B 0.0023
+#define PID_KD_B 0.0034
+```
+
+### Movement Patterns (control_main.c)
+
+Define custom movement sequences:
+```c
+Movement movements[] = {
+    {LINEAR, true, 12, 90, .0, 10.0f},     // Forward at 90°, 10s
+    {LINEAR, true, 10, 0, .0, 5.0f},       // Right, 5s  
+    {LINEAR, false, 20, 0, .0, 7.0f},      // Reverse, 7s
+    {CIRCULAR, true, 5, 360, 20.0f, ...}   // Circle CW
+};
+```
+
+## Troubleshooting
+
+### Connection Issues
+- Verify WiFi credentials and server IP
+- Check firewall settings (allow ports 8888, 8889)
+- Ensure ESP32 and server are on same network
+
+### PID Instability
+- Reduce initial gains if oscillations occur
+- Check encoder wiring and magnetic alignment
+- Verify motor PWM connections
+
+### Data Quality
+- Monitor CRC32 errors in telemetry logs
+- Check sample rate matches expectations
+- Verify movement completion flags
+
+## References
+
+- ESP-IDF Documentation: https://docs.espressif.com/projects/esp-idf/
+- AS5600 Datasheet: https://ams.com/as5600
+- LSTM Networks: https://colah.github.io/posts/2015-08-Understanding-LSTMs/
+
+## Authors
+
+- **Nelson Fernando Parra Guardia**
+
+## License
+
+See LICENSE file for details.
 │       ├── control_main.h
 │       └── mov_calculation.h
 └── Simulation/              # LSTM training scripts (external)

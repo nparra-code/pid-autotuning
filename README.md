@@ -27,7 +27,7 @@ ESP32-S3 firmware implementation for a three-wheeled omniwheel robot with adapti
 
 See [pid-autotuning-firmware/README.md](pid-autotuning-firmware/README.md) for detailed documentation.
 
-### 2. `Simulation/`
+### 2. `simulation/`
 
 Mathematical modeling, simulation, and machine learning environment for the omniwheel robot.
 
@@ -63,3 +63,61 @@ The autotuning system operates in a feedback loop:
 4. **Parameters** are sent back to the robot for improved control performance
 
 This approach enables adaptive control that continuously improves based on real-world performance.
+
+---
+
+## Results
+
+### Simulation Results (Best: LSTM 128-64)
+
+The LSTM model with **128 tanh units + 64 ReLU units** demonstrated the best performance in simulation:
+
+![Simulation Best Result - LSTM 128-64](Simulation/results/pid_tuning_comparison_lstm128tanh_64relu_exp_1401.png)
+
+**Performance Metrics:**
+- **Oscillation Reduction:** Significant decrease in tracking error variance
+- **Steady-State Error:** Minimal offset after convergence
+- **Convergence Time:** Faster settling compared to baseline PID
+
+See [Simulation/README.md](Simulation/README.md) for complete simulation results across all model architectures.
+
+---
+
+### Experimental Firmware Results (Best: LSTM 128-32)
+
+Real-world autotuning on ESP32-S3 hardware with **128 tanh units + 32 ReLU units**:
+
+![Experimental Best Result - LSTM 128-32](pid-autotuning-firmware/00_autotuning_results/128_32/pid_tuning_comparison_20260114_160127.png)
+
+**Hardware Performance:**
+- **Before Tuning:** High oscillations and tracking errors
+- **After RNN Tuning:** Smooth tracking with minimal overshoot
+- **Improvement:** ~60-70% reduction in combined error score
+
+---
+
+### Classical Methods Comparison
+
+Traditional tuning approaches tested on hardware:
+
+#### Ziegler-Nichols Method
+![Ziegler-Nichols Result](pid-autotuning-firmware/00_classical_results/pid_tuning_comparison_20260114_174810.png)
+
+**Characteristics:**
+- Conservative gains
+- Moderate oscillations
+- Good stability margin
+
+#### Cohen-Coon Method
+![Cohen-Coon Result](pid-autotuning-firmware/00_classical_results/pid_tuning_comparison_20260114_175524.png)
+
+**Characteristics:**
+- Faster response than Ziegler-Nichols
+- Slightly higher overshoot
+- Better for processes with dead time
+
+**Conclusion:** RNN-based autotuning outperforms classical methods in both convergence speed and steady-state accuracy.
+
+See [pid-autotuning-firmware/README.md](pid-autotuning-firmware/README.md) for complete experimental results across all model architectures and classical methods.
+
+---
