@@ -146,8 +146,9 @@ t_out, y_out = ct.input_output_response(sys_lin_z, T, U.T, X0)
 x_pos = y_out[0]
 y_pos = y_out[1]
 
-x_pos_world = (x_pos * np.cos((np.pi/4)) - y_pos * np.sin((np.pi/4)))
-y_pos_world = (x_pos * np.sin((np.pi/4)) + y_pos * np.cos((np.pi/4)))
+angle = np.pi/4 - np.pi/2
+x_pos_world = (x_pos * np.cos(angle) - y_pos * np.sin(angle))
+y_pos_world = (x_pos * np.sin(angle) + y_pos * np.cos(angle))
 
 # np.savez(f'/content/drive/MyDrive/pid_autotuning/data/train/run_n16{Ts}{Kp}{Ki}{Kd}_4.npz', X=X_samples, y=Y_samples)
 # np.savez(f'/content/drive/MyDrive/pid_autotuning/data/to_predict/run_{Ts}{Kp}{Ki}{Kd}.npz', X=X_samples, y=Y_samples)
@@ -166,7 +167,7 @@ plt.plot(T, y_log[:,5], label='ω3 actual')
 plt.xlabel('Time [s]')
 plt.ylabel('Wheel Velocities')
 plt.legend()
-plt.title('Incremental PID Velocity Tracking per Wheel')
+plt.title('PID Velocity Tracking per Wheel')
 plt.grid()
 
 plt.show()
