@@ -1,3 +1,11 @@
+"""
+@file dse_pid.py
+@brief Design Space Exploration (DSE) for PID parameters
+@details Performs exhaustive grid search over PID gain space to find optimal
+         controller parameters. Evaluates multiple combinations and ranks them
+         based on composite performance metrics.
+"""
+
 from functions import *
 import control as ct
 import matplotlib.pyplot as plt

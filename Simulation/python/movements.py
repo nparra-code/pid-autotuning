@@ -1,9 +1,27 @@
+"""  
+@file movements.py
+@brief Movement primitives for omniwheel robot control
+@details Provides functions to convert between linear and angular velocities,
+         and generate movement commands for linear and circular paths
+"""
+
 from math import sqrt, sin, cos, pi
 N = 1
 R = 1
 DELTA = pi/4
 
 def lin_to_ang_vel(x_velocity, y_velocity, wheel):
+  """
+  @brief Convert linear velocities to angular wheel velocity
+  @details Applies inverse kinematics to compute individual wheel velocities
+           from desired robot body velocities
+  
+  @param x_velocity Desired x-direction velocity (m/s)
+  @param y_velocity Desired y-direction velocity (m/s)
+  @param wheel Wheel number (1=right, 2=left, 3=back)
+  
+  @return Angular velocity of specified wheel (rad/s)
+  """
   scale = N / R
 
   cos_d = cos(DELTA)
@@ -19,6 +37,16 @@ def lin_to_ang_vel(x_velocity, y_velocity, wheel):
     return scale * ( x_velocity )
 
 def lin_move(f, lin_vel, angle):
+  """
+  @brief Generate velocity command for linear motion
+  @details Computes x and y velocity components for straight-line motion at specified angle
+  
+  @param f Direction flag: True for forward, False for reverse
+  @param lin_vel Linear velocity magnitude (m/s)
+  @param angle Direction angle in degrees (0=north, 90=east)
+  
+  @return Tuple (vx, vy) of velocity components (m/s)
+  """
   if f == True:
     return -lin_vel * sin(angle * pi / 180.0), -lin_vel * cos(angle * pi / 180.0)
   else:
@@ -26,17 +54,16 @@ def lin_move(f, lin_vel, angle):
 
 def circ_move(cw, lin_velocity, angle, radius, t):
     """
-    Generate velocity components for circular motion.
+    @brief Generate velocity components for circular motion
+    @details Computes instantaneous velocity for following a circular arc
     
-    Args:
-        cw: True for clockwise, False for counter-clockwise
-        lin_velocity: tangential velocity (linear speed along the circle)
-        angle: total angle to traverse in degrees
-        radius: radius of the circular path
-        t: current time instant
+    @param cw Direction flag: True for clockwise, False for counter-clockwise
+    @param lin_velocity Tangential velocity (linear speed along the circle) (m/s)
+    @param angle Total angle to traverse in degrees
+    @param radius Radius of the circular path (m)
+    @param t Current time instant (s)
     
-    Returns:
-        (vx, vy): velocity components in x and y directions
+    @return Tuple (vx, vy) of velocity components in x and y directions (m/s)
     """
     # Calculate time needed to complete the desired angle
     time_to_complete = (angle / 360.0) * 2 * pi * radius / lin_velocity

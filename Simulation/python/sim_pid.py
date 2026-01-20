@@ -1,3 +1,11 @@
+"""
+@file sim_pid.py
+@brief Basic PID controller simulation for omniwheel robot
+@details Implements and tests a discrete-time incremental PID controller on a
+         linearized omniwheel robot model. Collects training data for machine
+         learning applications.
+"""
+
 from functions import *
 from movements import *
 
@@ -51,10 +59,6 @@ sys_lin_z = ct.StateSpace(A_z, B_z, C_z, D_z, Ts)
 X0 = [0, 0, 0, 0, 0, 0]
 
 # PID parameters for each wheel
-# Kp = np.array([21.1, 20.4, 21.1])
-# Ki = np.array([18.1, 15.9, 18.1])
-# Kd = np.array([0.03, 0.02, 0.03])
-
 Kp = np.array([2.5, 2.3, 2.6])
 Ki = np.array([0.002, 0.001, 0.002])
 Kd = np.array([0.003, 0.002, 0.003])
@@ -122,20 +126,6 @@ for k in range(2, len(T)):
 X_samples = np.array(X_samples)
 Y_samples = np.array(Y_samples)
 
-# Save X_samples to CSV with appropriate headers
-# import pandas as pd
-# header = [
-#     'motor_state_0', 'motor_state_1', 'motor_state_2',
-#     'motor_setpoint_0', 'motor_setpoint_1', 'motor_setpoint_2',
-#     'error_0_k', 'error_0_k1', 'error_0_k2',
-#     'error_1_k', 'error_1_k1', 'error_1_k2',
-#     'error_2_k', 'error_2_k1', 'error_2_k2'
-# ]
-# df_X_samples = pd.DataFrame(X_samples, columns=header)
-# csv_filename = f'X_samples_Kp{Kp[0]}_Ki{Ki[0]}_Kd{Kd[0]}.csv'
-# df_X_samples.to_csv(csv_filename, index=False)
-# print(f"X_samples saved to: {csv_filename}")
-
 # -------------------------------
 # After loop: reuse U_pid
 # -------------------------------
@@ -152,10 +142,6 @@ y_pos_world = (x_pos * np.sin(angle) + y_pos * np.cos(angle))
 
 # np.savez(f'/content/drive/MyDrive/pid_autotuning/data/train/run_n16{Ts}{Kp}{Ki}{Kd}_4.npz', X=X_samples, y=Y_samples)
 # np.savez(f'/content/drive/MyDrive/pid_autotuning/data/to_predict/run_{Ts}{Kp}{Ki}{Kd}.npz', X=X_samples, y=Y_samples)
-
-# fig, axs = plt.subplots(2, 1, figsize=(15, 20))
-
-# ax = axs[1]  # Reference to current subplot
 
 # Plot results
 plt.plot(T, omega_ref[:,0], '--', label='ω_ref1')

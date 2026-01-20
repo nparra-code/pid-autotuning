@@ -1,4 +1,25 @@
+"""  
+@file cohen_coon.py
+@brief Cohen-Coon PID tuning method implementation
+@details Implements the Cohen-Coon tuning rules for P, PI, and PID controllers
+         based on process reaction curve parameters
+"""
+
 def cohen_coon(type, kp, tm, tau):
+  """
+  @brief Calculate PID parameters using Cohen-Coon tuning rules
+  @details Computes controller gains based on process gain, dead time, and time constant
+  
+  @param type Controller type: 'P', 'PI', or 'PID'
+  @param kp Process gain (steady-state gain)
+  @param tm Dead time (time delay) in seconds
+  @param tau Time constant in seconds
+  
+  @return Tuple (Kc, ti, td) where:
+          - Kc: Controller gain
+          - ti: Integral time constant (0 for P controller)
+          - td: Derivative time constant (0 for P and PI controllers)
+  """
   if type == 'P':
     return (tau/kp/tm)*(1+tm/3/tau), 0, 0
   elif type == 'PI':

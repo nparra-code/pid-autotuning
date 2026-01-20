@@ -1,6 +1,13 @@
+"""  
+@file eval.py
+@brief Evaluation script for classical PID tuning methods
+@details Compares Ziegler-Nichols and Cohen-Coon tuning methods for
+         three-motor omniwheel robot system. Applies tuning rules to
+         measured step response data from each motor.
+"""
+
 from ziegler_nichols import ziegler_nichols_openloop
 from cohen_coon import cohen_coon
-from s_to_z import s_z_domain
 
 Ts = 0.001
 
@@ -36,14 +43,3 @@ print("---------------------------------------------")
 print("Cohen-Coon PID Controller Parameters for Back:")
 print(f"Kp: {Kp_cc:.2f}, Ki: {Ki_cc:.2f}, Kd: {Kd_cc:.3f}")
 print("---------------------------------------------")
-
-# K_zn_z = s_z_domain(Kp_zn, Ki_zn, Kd_zn, Ts)
-# K_cc_z = s_z_domain(Kp_cc, Ki_cc, Kd_cc, Ts)
-
-# print("---------------------------------------------")
-# print("Ziegler-Nichols PID Controller Parameters (Z-domain):")
-# print(f"Kp: {K_zn_z['Kp_disc']}, Ki: {K_zn_z['Ki_z']:.2f}, Kd: {K_zn_z['Kd_z']:.3f}")
-# print("---------------------------------------------")
-# print("Cohen-Coon PID Controller Parameters (Z-domain):")
-# print(f"Kp: {K_cc_z['Kp_disc']:.2f}, Ki: {K_cc_z['Ki_z']:.2f}, Kd: {K_cc_z['Kd_z']:.3f}")
-# print("---------------------------------------------")

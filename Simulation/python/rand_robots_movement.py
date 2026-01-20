@@ -1,3 +1,11 @@
+"""
+@file rand_robots_movement.py
+@brief Generate training data from random robot configurations
+@details Simulates multiple robots with randomly varying motor parameters,
+         running identical trajectories with fixed PID gains. Generates
+         comprehensive datasets including velocity tracking and trajectory plots.
+"""
+
 from functions import *
 
 import control as ct

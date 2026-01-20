@@ -1,3 +1,10 @@
+"""
+@file dse_motor_cts.py
+@brief Design Space Exploration (DSE) for motor constants variation
+@details Performs grid search over PID parameter space for multiple robot configurations
+         with varying motor constants. Evaluates controller performance across different
+         hardware parameter sets to identify robust PID gains.
+"""
 
 from functions import *
 

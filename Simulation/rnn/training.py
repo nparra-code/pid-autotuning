@@ -1,3 +1,11 @@
+"""  
+@file training.py
+@brief RNN model training for PID autotuning
+@details Implements LSTM neural network training for learning optimal PID gains
+         from experimental telemetry data. Includes comprehensive evaluation and
+         visualization of training results.
+"""
+
 from functions import *
 
 import numpy as np

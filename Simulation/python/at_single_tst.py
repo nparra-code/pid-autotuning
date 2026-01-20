@@ -1,3 +1,11 @@
+"""
+@file at_single_tst.py
+@brief Single autotuning test with comparison between initial and ideal PID gains
+@details Tests PID controller performance across multiple random robot configurations,
+         comparing initial PID gains against ideal reference gains. Evaluates path tracking
+         accuracy for validation of the control system.
+"""
+
 from functions import *
 
 import control as ct

@@ -1,9 +1,28 @@
+"""  
+@file functions.py
+@brief Utility functions for RNN-based PID autotuning
+@details Provides data loading, sequence building, and preprocessing functions
+         for training and evaluating LSTM models on PID tuning tasks
+"""
+
 import numpy as np
 import pandas as pd
 import re
 import os
 
 def build_sequences(X, y, seq_len=20):
+    """
+    @brief Build sequential data for RNN training
+    @details Creates overlapping sequences from time series data with corresponding labels
+    
+    @param X Input features array of shape (N, num_features)
+    @param y Target labels array of shape (N, num_outputs)
+    @param seq_len Sequence length for RNN input (default: 20)
+    
+    @return Tuple (X_seq, y_seq) where:
+            - X_seq: Sequenced input array of shape (N-seq_len, seq_len, num_features)
+            - y_seq: Target array of shape (N-seq_len, num_outputs)
+    """
     X_seq, y_seq = [], []
     for i in range(len(X) - seq_len):
         X_seq.append(X[i:i+seq_len])
@@ -11,6 +30,15 @@ def build_sequences(X, y, seq_len=20):
     return np.array(X_seq), np.array(y_seq)
 
 def load_dataset(folder, seq_len=20):
+    """
+    @brief Load and prepare dataset from .npz files
+    @details Loads all .npz files from specified folder and builds sequences
+    
+    @param folder Path to folder containing .npz data files
+    @param seq_len Sequence length for RNN input (default: 20)
+    
+    @return Tuple (X_all, y_all) of concatenated sequences from all files
+    """
     X_all, y_all = [], []
     import glob
     for f in glob.glob(f"{folder}/*.npz"):
@@ -25,12 +53,14 @@ def load_dataset(folder, seq_len=20):
 
 def parse_pid_gains_from_filename(filename):
     """
-    Extract PID gains from filename format:
-    'telemetry_x_x_[Kp0, Kp1, Kp2][Ki0, Ki1, Ki2][Kd0, Kd1, Kd2].csv'
+    @brief Extract PID gains from filename string
+    @details Parses filename format 'telemetry_x_x_[Kp0, Kp1, Kp2][Ki0, Ki1, Ki2][Kd0, Kd1, Kd2].csv'
     
-    Returns:
-        numpy array of shape (3, 3) where rows are [motor0, motor1, motor2]
-        and columns are [Kp, Ki, Kd]
+    @param filename Full path or basename of telemetry CSV file
+    
+    @return Numpy array of shape (3, 3) where rows are motors and columns are [Kp, Ki, Kd]
+    
+    @throws ValueError If filename format doesn't match expected pattern
     """
     basename = os.path.basename(filename)
     
@@ -55,20 +85,21 @@ def parse_pid_gains_from_filename(filename):
 
 def load_experimental_csv(csv_path):
     """
-    Load experimental telemetry data from CSV and extract training samples.
+    @brief Load experimental telemetry data from CSV file
+    @details Extracts training samples from CSV containing motor states, setpoints, and errors
     
-    CSV columns expected:
-    - motor_state_0, motor_state_1, motor_state_2 (current states)
-    - motor_setpoint_0, motor_setpoint_1, motor_setpoint_2 (references)
-    - error_0_k, error_0_k1, error_0_k2 (errors for motor 0)
-    - error_1_k, error_1_k1, error_1_k2 (errors for motor 1)
-    - error_2_k, error_2_k1, error_2_k2 (errors for motor 2)
+    @param csv_path Path to telemetry CSV file with embedded PID gains in filename
     
-    Filename format: 'telemetry_x_x_[Kps][Kis][Kds].csv'
+    @return Tuple (X_samples, Y_samples) where:
+            - X_samples: Array of shape (N, 15) with [state, setpoint, error] features
+            - Y_samples: Array of shape (N, 9) with flattened PID gains
     
-    Returns:
-        X_samples: numpy array of shape (N, 15) containing [s_k, r_k, e_k, e_k1, e_k2]
-        Y_samples: numpy array of shape (N, 9) containing [Kp0, Ki0, Kd0, Kp1, Ki1, Kd1, Kp2, Ki2, Kd2]
+    @note CSV columns expected:
+          - motor_state_0, motor_state_1, motor_state_2 (current states)
+          - motor_setpoint_0, motor_setpoint_1, motor_setpoint_2 (references)
+          - error_0_k, error_0_k1, error_0_k2 (errors for motor 0)
+          - error_1_k, error_1_k1, error_1_k2 (errors for motor 1)
+          - error_2_k, error_2_k1, error_2_k2 (errors for motor 2)
     """
     # Load CSV
     df = pd.read_csv(csv_path)
@@ -100,15 +131,17 @@ def load_experimental_csv(csv_path):
 
 def load_experimental_dataset(folder, seq_len=20):
     """
-    Load all experimental CSV files from a folder and build sequences for RNN training.
+    @brief Load all experimental CSV files and build RNN sequences
+    @details Processes multiple CSV files from experimental runs and creates training dataset
     
-    Args:
-        folder: path to folder containing CSV files
-        seq_len: sequence length for RNN
-        
-    Returns:
-        X_seq: numpy array of shape (N, seq_len, 15)
-        y_seq: numpy array of shape (N, 9)
+    @param folder Path to folder containing experimental CSV files
+    @param seq_len Sequence length for RNN input (default: 20)
+    
+    @return Tuple (X_seq, y_seq) where:
+            - X_seq: Array of shape (N, seq_len, 15) for RNN input
+            - y_seq: Array of shape (N, 9) with PID gain labels
+    
+    @throws ValueError If no valid CSV files found in folder
     """
     import glob
     

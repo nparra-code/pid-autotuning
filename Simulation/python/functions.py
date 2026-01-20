@@ -1,8 +1,37 @@
+"""
+@file functions.py
+@brief Core functions for omniwheel robot simulation and PID control
+@details This module contains the main functions for simulating an omniwheel robot system,
+         including state update functions, trajectory generation, PID simulation, and 
+         quality metrics calculation.
+"""
+
 import numpy as np
 from math import sqrt, sin, cos, pi
 from movements import lin_to_ang_vel, lin_move, circ_move
 
 def updfnc_omniwheel(t, X, U, params):
+    """
+    @brief Update function for omniwheel robot dynamics
+    @details Computes the state derivative for a 3-wheel omniwheel robot considering motor dynamics,
+             planetary gearboxes, and slip model
+    
+    @param t Current time (scalar)
+    @param X State vector [x, y, phi, dx, dy, dphi] - position and velocity in world frame
+    @param U Control input vector [u1, u2, u3] - voltage commands for three motors
+    @param params Dictionary containing robot and motor parameters:
+                  - d: Distance of wheels from robot center (m)
+                  - r: Wheel radius (m)
+                  - K_1, K_2, K_3: Motor constants (V/rad/s)
+                  - Ra_1, Ra_2, Ra_3: Motor armature resistances (Ohm)
+                  - M: Robot mass (kg)
+                  - I: Robot moment of inertia (kg*m^2)
+                  - delt: Wheel angle offset (rad)
+                  - n: Gearbox reduction ratios [n1, n2, n3]
+                  - eta: Gearbox efficiencies [eta1, eta2, eta3]
+    
+    @return State derivative vector [dx, dy, dphi, ddx, ddy, ddphi]
+    """
     # Parameter setup
     d = params.get('d', 0.099)   # Distance of the wheels wrt robot center
     r = params.get('r', 0.0325)  # Wheel radius
@@ -101,9 +130,38 @@ def updfnc_omniwheel(t, X, U, params):
 
 
 def outfnc_omniwheel(t, X, U, params):
+    """
+    @brief Output function for omniwheel robot
+    @details Returns the full state vector as output (identity mapping)
+    
+    @param t Current time (scalar)
+    @param X State vector [x, y, phi, dx, dy, dphi]
+    @param U Control input vector [u1, u2, u3]
+    @param params Parameter dictionary (not used in this function)
+    
+    @return State vector X unchanged
+    """
     return X
 
 def generate_omega_ref_trajectory(mov_tuples_list, Ts):
+  """
+  @brief Generate reference omega trajectory from movement descriptions
+  @details Converts high-level movement commands (linear, circular) into wheel velocity references
+  
+  @param mov_tuples_list List of movement tuples, each tuple contains:
+                         (mov_type, forward/cw, linear_vel, angle, radius, time)
+                         - mov_type: 'linear' or 'circular'
+                         - forward/cw: True for forward/clockwise, False otherwise
+                         - linear_vel: Linear velocity (m/s)
+                         - angle: Angle in degrees
+                         - radius: Radius for circular motion (m)
+                         - time: Duration of movement (s)
+  @param Ts Sampling time period (s)
+  
+  @return Tuple (omega_ref, total_sim_time) where:
+          - omega_ref: numpy array of shape (N, 3) with wheel velocities
+          - total_sim_time: time vector for the trajectory
+  """
   # compute total simulation time vector
   for mov_tuple in mov_tuples_list:
     print(mov_tuple)
@@ -136,7 +194,20 @@ def generate_omega_ref_trajectory(mov_tuples_list, Ts):
 
 # --- Define helper functions ---
 def quality_metrics(ref, actual, T, tol=0.05):
-    """Compute steady-state error, overshoot, oscillation, and settling time."""
+    """
+    @brief Compute quality metrics for PID controller performance
+    @details Calculates steady-state error, overshoot, and oscillation metrics
+    
+    @param ref Reference trajectory array of shape (N, num_outputs)
+    @param actual Actual trajectory array of shape (N, num_outputs)
+    @param T Time vector (not used in current implementation)
+    @param tol Tolerance for steady-state detection (default: 0.05)
+    
+    @return Tuple (setpoint_error, overshoot, oscillation) containing:
+            - setpoint_error: Mean absolute steady-state error
+            - overshoot: Mean overshoot percentage across all outputs
+            - oscillation: Mean variance of error in steady-state region
+    """
     N = len(ref)
     ref_final = np.mean(ref[int(0.8*N):], axis=0)
     act_final = np.mean(actual[int(0.8*N):], axis=0)
@@ -164,8 +235,15 @@ def quality_metrics(ref, actual, T, tol=0.05):
 # We need H^-1 or pseudo-inverse to go from robot velocities to wheel velocities
 def get_wheel_velocities_from_robot_state(robot_vel, phi, d=0.099):
     """
-    Convert robot velocities [dx, dy, dphi] to wheel velocities [w1, w2, w3]
-    using the H matrix from the omniwheel kinematics
+    @brief Convert robot velocities to wheel velocities using inverse kinematics
+    @details Uses the H matrix from omniwheel kinematics to map from robot body frame
+             velocities to individual wheel velocities
+    
+    @param robot_vel Robot velocity vector [dx, dy, dphi] in body frame
+    @param phi Current robot orientation angle (rad)
+    @param d Distance of wheels from robot center (m, default: 0.099)
+    
+    @return Wheel velocity vector [w1, w2, w3] (rad/s)
     """
     delt = np.pi/6
     phi = phi + delt
@@ -183,7 +261,32 @@ def get_wheel_velocities_from_robot_state(robot_vel, phi, d=0.099):
     return wheel_vel
 
 def run_pid_sim(Kp, Ki, Kd, beta, A, B, C, D, T, omega_ref, Ts, save_to_file, file_name, directory):
-    """Run PID loop simulation for given gains."""
+    """
+    @brief Run PID control loop simulation with specified gains
+    @details Simulates a discrete-time PID controller applied to a linear system
+    
+    @param Kp Proportional gains array [Kp1, Kp2, Kp3]
+    @param Ki Integral gains array [Ki1, Ki2, Ki3]
+    @param Kd Derivative gains array [Kd1, Kd2, Kd3]
+    @param beta Setpoint weighting factor (not currently used)
+    @param A State transition matrix (discrete-time)
+    @param B Input matrix (discrete-time)
+    @param C Output matrix (discrete-time)
+    @param D Feedthrough matrix (discrete-time)
+    @param T Time vector for simulation
+    @param omega_ref Reference trajectory array of shape (N, 3)
+    @param Ts Sampling time period (s)
+    @param save_to_file Boolean flag to save training data
+    @param file_name Filename for saved data (without extension)
+    @param directory Directory path for saved data
+    
+    @return Tuple (set_err, overshoot, osc, y_log, U_pid) containing:
+            - set_err: Steady-state error metric
+            - overshoot: Overshoot metric
+            - osc: Oscillation metric
+            - y_log: Output trajectory log
+            - U_pid: Control input history
+    """
     x = np.zeros((A.shape[0],))
     U_pid = np.zeros((len(T), 3))
     e = np.zeros((len(T), 3))
@@ -240,7 +343,15 @@ def run_pid_sim(Kp, Ki, Kd, beta, A, B, C, D, T, omega_ref, Ts, save_to_file, fi
     return set_err, overshoot, osc, y_log, U_pid
 
 def generate_random_motor_params():
-    """Generate 1 random set of K_n and Ra_n."""
+    """
+    @brief Generate random motor parameters for Monte Carlo simulation
+    @details Creates random variations of motor constants and armature resistances
+             within ±40% of nominal values
+    
+    @return Dictionary containing:
+            - K_1, K_2, K_3: Motor constants (V/rad/s)
+            - Ra_1, Ra_2, Ra_3: Motor armature resistances (Ohm)
+    """
     dev_c = 0.4  # 35% deviation
     nom_K = 0.259
     nom_Ra = 1.3111
@@ -254,6 +365,15 @@ def generate_random_motor_params():
     return params
 
 def build_sequences(X, seq_len=20):
+    """
+    @brief Build sequences for RNN input from time series data
+    @details Creates sliding window sequences of specified length
+    
+    @param X Input data array of shape (N, num_features)
+    @param seq_len Sequence length for sliding window (default: 20)
+    
+    @return Numpy array of shape (N-seq_len, seq_len, num_features)
+    """
     X_seq = []
     for i in range(len(X) - seq_len):
         X_seq.append(X[i:i+seq_len])
@@ -261,8 +381,18 @@ def build_sequences(X, seq_len=20):
 
 def calculate_path_error_metrics(x_actual, y_actual, x_ideal, y_ideal):
     """
-    Calculates the instantaneous position error, RMSE, and MAE
-    for the robot's global path tracking.
+    @brief Calculate path tracking error metrics
+    @details Computes RMSE, MAE, and total absolute error for trajectory following
+    
+    @param x_actual Actual x-coordinates of robot trajectory
+    @param y_actual Actual y-coordinates of robot trajectory
+    @param x_ideal Ideal/reference x-coordinates
+    @param y_ideal Ideal/reference y-coordinates
+    
+    @return Tuple (rmse, mae, abs_err) containing:
+            - rmse: Root mean square error (m)
+            - mae: Mean absolute error (m)
+            - abs_err: Total absolute error (m)
     """
     # 1. Calculate the error in X and Y components at each step
     error_x = x_ideal - x_actual
@@ -287,12 +417,17 @@ def calculate_path_error_metrics(x_actual, y_actual, x_ideal, y_ideal):
 # --- AI Model Placeholder Function ---
 def predict_pid_constants(model, X_samples):
     """
-    Placeholder for AI model inference. In a real application, this would:
-    1. Aggregate or process X_samples (state, reference, error data) collected.
-    2. Load the trained AI model.
-    3. Run model.predict() to get new Kp, Ki, Kd values.
-
-    For demonstration, we check the current time 'T[k]' and update Kp1 at t=5.0s.
+    @brief Predict PID constants using trained AI model
+    @details Uses RNN model to predict optimal PID gains based on collected trajectory samples
+    
+    @param model Trained Keras/TensorFlow model for PID prediction
+    @param X_samples Collected samples array of shape (N, 15) containing
+                    [state, reference, error] sequences
+    
+    @return Tuple (Kp_new, Ki_new, Kd_new) containing:
+            - Kp_new: Predicted proportional gains [Kp1, Kp2, Kp3]
+            - Ki_new: Predicted integral gains [Ki1, Ki2, Ki3]
+            - Kd_new: Predicted derivative gains [Kd1, Kd2, Kd3]
     """
     
 
@@ -308,13 +443,5 @@ def predict_pid_constants(model, X_samples):
     Kp_new = np.array([mean_gains[0], mean_gains[1], mean_gains[2]])
     Ki_new = np.array([mean_gains[3], mean_gains[4], mean_gains[5]])
     Kd_new = np.array([mean_gains[6], mean_gains[7], mean_gains[8]])
-
-    # print(f'Kp = np.array([{mean_gains[0]}, {mean_gains[1]}, {mean_gains[2]}])')
-    # print(f'Ki = np.array([{mean_gains[3]}, {mean_gains[4]}, {mean_gains[5]}])')
-    # print(f'Kd = np.array([{mean_gains[6]}, {mean_gains[7]}, {mean_gains[8]}])')
-
-    # print(f"\n--- PID CONSTANTS UPDATED at t={T_current}s ---")
-    # print(f"Kp before: {current_Kp}, Kp after: {Kp_new}")
-    # print("-----------------------------------------\n")
 
     return Kp_new, Ki_new, Kd_new

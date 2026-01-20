@@ -1,3 +1,10 @@
+"""  
+@file ziegler_nichols.py
+@brief Ziegler-Nichols PID tuning methods
+@details Implements both open-loop and closed-loop Ziegler-Nichols tuning rules
+         for P, PI, and PID controllers
+"""
+
 # Ziegler-Nichols PID Tuning Rules
 
 ## Comments in Doxygen
@@ -9,6 +16,17 @@
 # @param T Time constant
 # @return Tuple of (Kc, ti, td) for the specified controller type
 def ziegler_nichols_openloop(type, kp, tau, tm):
+  """
+  @brief Ziegler-Nichols open-loop (reaction curve) tuning method
+  @details Calculates PID parameters from step response characteristics
+  
+  @param type Controller type: 'P', 'PI', or 'PID'
+  @param kp Process gain
+  @param tau Time constant in seconds
+  @param tm Dead time (time delay) in seconds
+  
+  @return Tuple (Kc, ti, td) of controller parameters
+  """
   if type == 'P':
     return tm/tau, 10e20, 0
   elif type == 'PI':
@@ -17,6 +35,16 @@ def ziegler_nichols_openloop(type, kp, tau, tm):
     return (1.2*tau/(kp*tm), 2*tau/(kp*tm)), 2*tm, 0.5*tm 
 
 def ziegler_nichols_closedloop(type, Kcr, Pcr):
+  """
+  @brief Ziegler-Nichols closed-loop (ultimate gain) tuning method
+  @details Calculates PID parameters from critical gain and period
+  
+  @param type Controller type: 'P', 'PI', or 'PID'
+  @param Kcr Critical (ultimate) gain where system oscillates
+  @param Pcr Critical (ultimate) period of oscillation in seconds
+  
+  @return Tuple (Kc, ti, td) of controller parameters
+  """
   if type == 'P':
     return 0.5*Kcr, 10e20, 0
   elif type == 'PI':

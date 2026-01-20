@@ -1,3 +1,9 @@
+"""  
+@file inference.py
+@brief RNN model inference for PID prediction
+@details Loads trained LSTM model and predicts PID gains from test data
+"""
+
 from functions import *
 
 X, _ = load_dataset("/content/drive/MyDrive/pid_autotuning/data/to_predict", seq_len=20)

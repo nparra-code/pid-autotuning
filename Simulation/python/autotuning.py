@@ -1,3 +1,11 @@
+"""  
+@file autotuning.py
+@brief Automated PID tuning using RNN-based machine learning model
+@details Implements online PID autotuning by collecting trajectory data,
+         predicting optimal PID gains using a trained LSTM model, and
+         visualizing before/after performance comparisons
+"""
+
 from functions import *
 import os
 
@@ -21,14 +29,22 @@ model = keras.models.load_model(
 
 def plot_comparison_graphs(sp_before, sp_after, vel_log_before, vel_log_after, pos_before, pos_after, pos_ideal, pid_before, pid_after, time):
     """
-    Generate comparison plots for before/after PID tuning
+    @brief Generate comprehensive comparison plots for PID tuning evaluation
+    @details Creates multi-panel visualization showing motor tracking performance,
+             trajectory comparison, and error metrics before and after tuning
     
-    Args:
-        samples_before: numpy array of samples before tuning
-        samples_after: numpy array of samples after tuning
-        pid_before: tuple of (Kp, Ki, Kd) before tuning
-        pid_after: tuple of (Kp, Ki, Kd) after tuning
-        timestamp: timestamp string for filename
+    @param sp_before Setpoint trajectory before tuning (N, 3)
+    @param sp_after Setpoint trajectory after tuning (N, 3)
+    @param vel_log_before Velocity log before tuning (N, 6)
+    @param vel_log_after Velocity log after tuning (N, 6)
+    @param pos_before Tuple of (x, y) positions before tuning
+    @param pos_after Tuple of (x, y) positions after tuning
+    @param pos_ideal Tuple of (x, y) ideal/reference positions
+    @param pid_before Tuple of (Kp, Ki, Kd) gains before tuning
+    @param pid_after Tuple of (Kp, Ki, Kd) gains after tuning
+    @param time Time vector for plots
+    
+    @return Filename of the saved comparison plot
     """
     print("Generating comparison visualization...")
     
